@@ -1,0 +1,19 @@
+{
+  "systems": {
+    "OfficeMain": {
+      "host": "https://192.168.1.100:7001",
+      "user": "admin",
+      "pass": "your_password_here"
+    },
+    "RemoteSite-Proxy": {
+      "host": "https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.relay.vmsproxy.com",
+      "user": "admin",
+      "pass": "your_password_here"
+    },
+    "RemoteSite-Tailscale": {
+      "host": "https://your-host.tail12345.ts.net:7001",
+      "user": "admin",
+      "pass": "your_password_here"
+    }
+  }
+}

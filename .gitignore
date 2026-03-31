@@ -1,0 +1,27 @@
+# Credentials / config with secrets
+nx_systems.json
+
+# Backups
+.backup_*/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Env files
+.env
+.env.*
+
+# Claude local settings (contains machine-specific permissions)
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
