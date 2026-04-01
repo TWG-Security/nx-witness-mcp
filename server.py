@@ -70,11 +70,11 @@ def get_client(system: str | None = None) -> NXClient:
 
 def _sys_desc() -> str:
     names = list(SYSTEMS.keys())
-    return f"NX system to target. Available: {names}. Defaults to '{DEFAULT_SYSTEM}' if omitted."
+    return f"NX system to target. Required. Available systems: {names}."
 
 
-# Reusable annotated type for the optional system parameter
-SYS = Annotated[Optional[str], Field(default=None, description=_sys_desc())]
+# Reusable annotated type for the required system parameter
+SYS = Annotated[str, Field(description=_sys_desc())]
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +83,10 @@ SYS = Annotated[Optional[str], Field(default=None, description=_sys_desc())]
 
 @mcp.tool()
 async def nx_list_systems() -> dict:
-    """List all configured NX Witness systems known to this MCP server."""
+    """List all NX Witness systems configured on this MCP server.
+    IMPORTANT: Call this tool first before any other nx_ tool. Multiple systems
+    may be configured and every other tool requires a system name. Use the
+    returned system names as the `system` argument on subsequent calls."""
     return {"systems": list(SYSTEMS.keys()), "default": DEFAULT_SYSTEM}
 
 
@@ -92,7 +95,7 @@ async def nx_list_systems() -> dict:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def nx_server_info(system: SYS = None) -> dict:
+async def nx_server_info(system: SYS) -> dict:
     """Get NX Witness server information including name, version, and system details."""
     return await get_client(system).get_server_info()
 
@@ -101,7 +104,7 @@ async def nx_server_info(system: SYS = None) -> dict:
 async def nx_list_cameras(
     device_type: Annotated[Optional[str], Field(default=None, description="Optional filter (e.g. 'camera', 'ioModule')")] = None,
     detailed: Annotated[bool, Field(default=False, description="If true, return full device objects instead of summary fields. Use this when you need firmware, parameters, or other detailed info for multiple devices at once.")] = False,
-    system: SYS = None,
+    system: SYS,
 ) -> list:
     """List all cameras/devices. Returns id, name, status, vendor, model, URL, and firmware. Use detailed=true to get full device objects (all fields) — avoids calling nx_get_camera per device. Note: the NX Witness API may omit offline devices in detailed mode on some server versions; summary mode (default) is the most reliable way to enumerate all devices including offline ones."""
     devices = await get_client(system).list_devices(device_type=device_type)
@@ -119,7 +122,7 @@ async def nx_list_cameras(
 @mcp.tool()
 async def nx_get_camera(
     device_id: Annotated[str, Field(description="Device UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get detailed information about a specific camera/device by its UUID.
     Note: the NX Witness API returns 404 for offline devices. If that happens,
@@ -156,7 +159,7 @@ async def nx_create_device(
     options: Annotated[Optional[dict], Field(default=None, description="Advanced device options (isControlEnabled, isAudioEnabled, isDualStreamingDisabled, etc.)")] = None,
     schedule: Annotated[Optional[dict], Field(default=None, description="Recording schedule configuration (isEnabled, tasks, minArchivePeriodS, maxArchivePeriodS)")] = None,
     motion: Annotated[Optional[dict], Field(default=None, description="Motion detection settings (type, mask, recordBeforeS, recordAfterS)")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Create a new device record in the NX Witness Site. Note: does not verify device availability — use device search with addFoundDevices mode when possible. Returns the created device record including its assigned UUID."""
     return await get_client(system).create_device(
@@ -179,7 +182,7 @@ async def nx_create_device(
 async def nx_replace_device(
     device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
     device: Annotated[dict, Field(description="Full device object. Required fields: physicalId, url, typeId. All other fields will be replaced.")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Replace all fields of an existing device record (PUT). Must supply a complete device object including physicalId, url, and typeId."""
     return await get_client(system).replace_device(device_id, device)
@@ -189,7 +192,7 @@ async def nx_replace_device(
 async def nx_modify_device(
     device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
     changes: Annotated[dict, Field(description="Fields to update. Any subset of: name, url, typeId, mac, serverId, vendor, model, group, credentials, logicalId, isManuallyAdded, options, schedule, motion, parameters")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Partially update an existing device record (PATCH). Only supply the fields you want to change."""
     return await get_client(system).modify_device(device_id, changes)
@@ -198,14 +201,14 @@ async def nx_modify_device(
 @mcp.tool()
 async def nx_delete_device(
     device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Delete a device from the NX Witness Site permanently."""
     return await get_client(system).delete_device(device_id)
 
 
 @mcp.tool()
-async def nx_get_device_types(system: SYS = None) -> list:
+async def nx_get_device_types(system: SYS) -> list:
     """List all supported device driver types (camera drivers). Returns id, name, and manufacturer. Use the id as typeId when creating devices manually."""
     return await get_client(system).get_device_types()
 
@@ -217,7 +220,7 @@ async def nx_start_device_search(
     credentials: Annotated[Optional[dict], Field(default=None, description='Credentials to try on found devices, e.g. {"user": "admin", "password": "pass"}')] = None,
     mode: Annotated[Optional[str], Field(default=None, description="'waitResults' to block until search completes, 'addFoundDevices' to automatically add discovered cameras to the site")] = None,
     server_id: Annotated[Optional[str], Field(default=None, description="Server UUID to run the search on (defaults to current server)")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Start a network scan to discover cameras/devices. Returns a search object with an id. Poll nx_get_device_search to check progress. Use mode='addFoundDevices' to auto-add cameras."""
     return await get_client(system).start_device_search(
@@ -226,7 +229,7 @@ async def nx_start_device_search(
 
 
 @mcp.tool()
-async def nx_list_device_searches(system: SYS = None) -> list:
+async def nx_list_device_searches(system: SYS) -> list:
     """List all device searches currently running or recently completed in the Site."""
     return await get_client(system).list_device_searches()
 
@@ -234,7 +237,7 @@ async def nx_list_device_searches(system: SYS = None) -> list:
 @mcp.tool()
 async def nx_get_device_search(
     search_id: Annotated[str, Field(description="Device search ID returned by nx_start_device_search")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get the status and results of a specific device search. Check status.state: Init, CheckingOnline, CheckingHost, Finished, Aborted. Found cameras appear in the devices array."""
     return await get_client(system).get_device_search(search_id)
@@ -243,7 +246,7 @@ async def nx_get_device_search(
 @mcp.tool()
 async def nx_stop_device_search(
     search_id: Annotated[str, Field(description="Device search ID to stop and delete")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Stop and delete a device search."""
     return await get_client(system).stop_device_search(search_id)
@@ -252,14 +255,14 @@ async def nx_stop_device_search(
 @mcp.tool()
 async def nx_get_device_diagnosis(
     device_id: Annotated[str, Field(description="Device UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get diagnostic information for a specific device. Returns status, init, stream, and media diagnostic fields."""
     return await get_client(system).get_device_status(device_id)
 
 
 @mcp.tool()
-async def nx_get_all_devices_diagnosis(system: SYS = None) -> list:
+async def nx_get_all_devices_diagnosis(system: SYS) -> list:
     """Get diagnostic information for all devices in the Site. Returns id, status, init, stream, and media fields for each device."""
     return await get_client(system).get_all_devices_diagnosis()
 
@@ -269,7 +272,7 @@ async def nx_camera_snapshot(
     device_id: Annotated[str, Field(description="Device UUID")],
     width: Annotated[Optional[int], Field(default=None, description="Optional width in pixels")] = None,
     height: Annotated[Optional[int], Field(default=None, description="Optional height in pixels")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> Image:
     """Capture a live snapshot image from a camera. Returns a JPEG image."""
     b64 = await get_client(system).get_camera_snapshot(device_id, width=width, height=height)
@@ -279,7 +282,7 @@ async def nx_camera_snapshot(
 @mcp.tool()
 async def nx_camera_stream_url(
     device_id: Annotated[str, Field(description="Device UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> str:
     """Get a signed streaming URL for a camera's live video feed."""
     return await get_client(system).get_camera_stream_url(device_id)
@@ -302,7 +305,7 @@ async def nx_get_events(
     server_id: Annotated[Optional[str], Field(default=None, description="Limit to a specific server UUID")] = None,
     from_ms: Annotated[Optional[int], Field(default=None, description="Start time as Unix ms")] = None,
     duration_ms: Annotated[Optional[int], Field(default=None, description="Duration in ms from start time")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> list:
     """Query the event log (most recent first). Supports filtering by type, device, text, flags, and time range."""
     return await get_client(system).get_events(
@@ -327,7 +330,7 @@ async def nx_get_events(
 @mcp.tool()
 async def nx_get_log_settings(
     server_id: Annotated[str, Field(default="this", description="Server UUID or 'this' (default) for the current server")] = "this",
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get server log settings: available log files (main, http, system) and their paths/levels."""
     return await get_client(system).get_log_settings(server_id)
@@ -337,7 +340,7 @@ async def nx_get_log_settings(
 async def nx_get_server_log(
     name: Annotated[str, Field(default="MAIN", description="Log name: 'MAIN' (default), 'HTTP', or 'SYSTEM'")] = "MAIN",
     lines: Annotated[int, Field(default=200, description="Number of lines to return (default 200)")] = 200,
-    system: SYS = None,
+    system: SYS,
 ) -> str:
     """Get server application log lines. Use name='MAIN' for the main log, 'HTTP' for HTTP request log, 'SYSTEM' for the system log. Returns plain text log lines most-recent-last."""
     return await get_client(system).get_server_log(name=name, lines=lines)
@@ -354,7 +357,7 @@ async def nx_get_audit_log(
     username: Annotated[Optional[str], Field(default=None, description="Filter by username (case-insensitive)")] = None,
     from_sec: Annotated[Optional[int], Field(default=None, description="Start time as Unix epoch seconds")] = None,
     to_sec: Annotated[Optional[int], Field(default=None, description="End time as Unix epoch seconds")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> list:
     """Query the system audit log. Records admin/user actions: logins, camera changes, settings updates, archive views, exports, and more. Event types include: AR_Login, AR_UnauthorizedLogin, AR_CameraInsert, AR_CameraUpdate, AR_CameraRemove, AR_UserUpdate, AR_SettingsChange, AR_ExportVideo, AR_ViewArchive, AR_ViewLive, AR_StorageInsert, AR_StorageUpdate, AR_StorageRemove, AR_ServerUpdate, AR_ServerRemove, AR_UpdateInstall, AR_SystemmMerge, AR_BEventUpdate, AR_BEventRemove."""
     return await get_client(system).get_audit_log(
@@ -371,13 +374,13 @@ async def nx_get_audit_log(
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def nx_get_event_manifest_events(system: SYS = None) -> list:
+async def nx_get_event_manifest_events(system: SYS) -> list:
     """Get the manifest of all available event types supported by this NX Witness server."""
     return await get_client(system).get_event_manifest_events()
 
 
 @mcp.tool()
-async def nx_get_event_manifest_actions(system: SYS = None) -> list:
+async def nx_get_event_manifest_actions(system: SYS) -> list:
     """Get the manifest of all available action types that can be triggered by event rules."""
     return await get_client(system).get_event_manifest_actions()
 
@@ -387,7 +390,7 @@ async def nx_get_event_manifest_actions(system: SYS = None) -> list:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def nx_get_acknowledges(system: SYS = None) -> list:
+async def nx_get_acknowledges(system: SYS) -> list:
     """Get all event notifications that require acknowledgement."""
     return await get_client(system).get_acknowledges()
 
@@ -400,7 +403,7 @@ async def nx_acknowledge_event(
     start_time_ms: Annotated[int, Field(description="Event timestamp in ms")],
     duration_ms: Annotated[int, Field(default=1000, description="Bookmark duration in ms (default 1000)")] = 1000,
     name: Annotated[str, Field(default="Bookmark", description="Bookmark name (default 'Bookmark')")] = "Bookmark",
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Acknowledge an event notification. Creates a bookmark for the event."""
     return await get_client(system).acknowledge_event(
@@ -416,7 +419,7 @@ async def nx_acknowledge_event(
 @mcp.tool()
 async def nx_get_acknowledge(
     ack_id: Annotated[str, Field(description="Acknowledgement ID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get a specific acknowledgement notification by ID."""
     return await get_client(system).get_acknowledge(ack_id)
@@ -433,7 +436,7 @@ async def nx_create_generic_event(
     description: Annotated[Optional[str], Field(default=None, description="Longer event description")] = None,
     state: Annotated[str, Field(default="instant", description="'instant', 'active', or 'inactive'")] = "instant",
     metadata: Annotated[Optional[dict], Field(default=None, description="Optional key-value metadata")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Create a generic (custom) event on the NX Witness server. Useful for triggering rules from external systems."""
     return await get_client(system).create_generic_event(
@@ -450,7 +453,7 @@ async def nx_create_generic_event(
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def nx_get_triggers(system: SYS = None) -> list:
+async def nx_get_triggers(system: SYS) -> list:
     """List all software (soft) triggers configured on the NX Witness server."""
     return await get_client(system).get_triggers()
 
@@ -458,7 +461,7 @@ async def nx_get_triggers(system: SYS = None) -> list:
 @mcp.tool()
 async def nx_get_trigger(
     trigger_id: Annotated[str, Field(description="Trigger UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get details of a specific software trigger by ID."""
     return await get_client(system).get_trigger(trigger_id)
@@ -469,7 +472,7 @@ async def nx_fire_trigger(
     trigger_id: Annotated[str, Field(description="Trigger UUID to fire")],
     device_id: Annotated[Optional[str], Field(default=None, description="Optional device UUID to associate with the trigger")] = None,
     state: Annotated[str, Field(default="started", description="'started', 'stopped', or 'instant'")] = "started",
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Fire (activate) a software trigger event."""
     return await get_client(system).fire_trigger(
@@ -484,7 +487,7 @@ async def nx_fire_trigger(
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def nx_get_rules(system: SYS = None) -> list:
+async def nx_get_rules(system: SYS) -> list:
     """List all event rules configured on the NX Witness server."""
     return await get_client(system).get_rules()
 
@@ -492,7 +495,7 @@ async def nx_get_rules(system: SYS = None) -> list:
 @mcp.tool()
 async def nx_get_rule(
     rule_id: Annotated[str, Field(description="Rule UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get details of a specific event rule by ID."""
     return await get_client(system).get_rule(rule_id)
@@ -501,7 +504,7 @@ async def nx_get_rule(
 @mcp.tool()
 async def nx_create_rule(
     rule: Annotated[dict, Field(description="Full rule definition object")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Create a new event rule. Provide a full rule object as JSON."""
     return await get_client(system).create_rule(rule)
@@ -511,7 +514,7 @@ async def nx_create_rule(
 async def nx_replace_rule(
     rule_id: Annotated[str, Field(description="Rule UUID")],
     rule: Annotated[dict, Field(description="Full replacement rule object")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Replace an existing event rule entirely (PUT)."""
     return await get_client(system).replace_rule(rule_id, rule)
@@ -521,7 +524,7 @@ async def nx_replace_rule(
 async def nx_modify_rule(
     rule_id: Annotated[str, Field(description="Rule UUID")],
     changes: Annotated[dict, Field(description="Fields to update")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Partially update an existing event rule (PATCH)."""
     return await get_client(system).modify_rule(rule_id, changes)
@@ -530,14 +533,14 @@ async def nx_modify_rule(
 @mcp.tool()
 async def nx_delete_rule(
     rule_id: Annotated[str, Field(description="Rule UUID to delete")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Delete an event rule by ID."""
     return await get_client(system).delete_rule(rule_id)
 
 
 @mcp.tool()
-async def nx_reset_rules(system: SYS = None) -> dict:
+async def nx_reset_rules(system: SYS) -> dict:
     """Reset ALL event rules to factory defaults. This is destructive and cannot be undone."""
     return await get_client(system).reset_rules()
 
@@ -547,14 +550,14 @@ async def nx_reset_rules(system: SYS = None) -> dict:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def nx_list_analytics_engines(system: SYS = None) -> list:
+async def nx_list_analytics_engines(system: SYS) -> list:
     """List all analytics engines (AI/ML plugins) installed on the server."""
     engines = await get_client(system).list_analytics_engines()
     return [{"id": e.get("id"), "name": e.get("name"), "version": e.get("version"), "pluginId": e.get("pluginId")} for e in engines]
 
 
 @mcp.tool()
-async def nx_list_users(system: SYS = None) -> list:
+async def nx_list_users(system: SYS) -> list:
     """List all users configured in the NX Witness system."""
     users = await get_client(system).list_users()
     return [{"id": u.get("id"), "name": u.get("name"), "email": u.get("email"), "isEnabled": u.get("isEnabled")} for u in users]
@@ -565,7 +568,7 @@ async def nx_list_users(system: SYS = None) -> list:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def nx_list_servers(system: SYS = None) -> list:
+async def nx_list_servers(system: SYS) -> list:
     """List all servers in the NX Witness site with their IDs, names, URLs, and status."""
     return await get_client(system).list_servers()
 
@@ -573,7 +576,7 @@ async def nx_list_servers(system: SYS = None) -> list:
 @mcp.tool()
 async def nx_list_storages(
     server_id: Annotated[str, Field(description="Server UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> list:
     """List all storage locations configured on a specific server."""
     return await get_client(system).list_storages(server_id)
@@ -583,7 +586,7 @@ async def nx_list_storages(
 async def nx_get_storage_status(
     server_id: Annotated[str, Field(description="Server UUID")],
     storage_id: Annotated[str, Field(description="Storage UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get the status of a specific storage location on a server (free space, health, etc.)."""
     return await get_client(system).get_storage_status(server_id, storage_id)
@@ -600,7 +603,7 @@ async def nx_list_bookmarks(
     end_time_ms: Annotated[Optional[int], Field(default=None, description="Filter bookmarks starting before this time (Unix ms)")] = None,
     text: Annotated[Optional[str], Field(default=None, description="Text search filter (name, description, or tag)")] = None,
     limit: Annotated[Optional[int], Field(default=None, description="Maximum number of bookmarks to return")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> list:
     """List bookmarks for a camera/device. Optionally filter by time range or text search."""
     return await get_client(system).list_bookmarks(
@@ -620,7 +623,7 @@ async def nx_create_bookmark(
     start_time_ms: Annotated[Optional[int], Field(default=None, description="Bookmark start time (Unix ms). Defaults to current time if omitted.")] = None,
     description: Annotated[Optional[str], Field(default=None, description="Longer description of the bookmark")] = None,
     tags: Annotated[Optional[list[str]], Field(default=None, description="List of tag strings")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Create a bookmark on a camera/device to mark an important time range in the recorded footage."""
     return await get_client(system).create_bookmark(
@@ -637,7 +640,7 @@ async def nx_create_bookmark(
 async def nx_get_bookmark(
     device_id: Annotated[str, Field(description="Device UUID")],
     bookmark_id: Annotated[str, Field(description="Bookmark UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get details of a specific bookmark by ID."""
     return await get_client(system).get_bookmark(device_id, bookmark_id)
@@ -652,7 +655,7 @@ async def nx_update_bookmark(
     start_time_ms: Annotated[Optional[int], Field(default=None, description="New start time (Unix ms)")] = None,
     duration_ms: Annotated[Optional[int], Field(default=None, description="New duration in milliseconds")] = None,
     tags: Annotated[Optional[list[str]], Field(default=None, description="New list of tags (replaces existing)")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Update fields of an existing bookmark (name, description, time, duration, tags)."""
     return await get_client(system).update_bookmark(
@@ -669,7 +672,7 @@ async def nx_update_bookmark(
 @mcp.tool()
 async def nx_delete_bookmark(
     bookmark_id: Annotated[str, Field(description="Bookmark UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Delete a bookmark by its ID."""
     return await get_client(system).delete_bookmark(bookmark_id)
@@ -686,7 +689,7 @@ async def nx_get_footage(
     end_time_ms: Annotated[Optional[int], Field(default=None, description="End of time range (Unix ms)")] = None,
     detail_level_ms: Annotated[Optional[int], Field(default=None, description="Chunk granularity in ms (smaller = more detail)")] = None,
     max_count: Annotated[Optional[int], Field(default=None, description="Maximum number of chunks to return")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> list:
     """Get recorded footage chunk info for a device. Returns a list of recorded time periods/chunks. Use to check what footage is available."""
     return await get_client(system).get_footage(
@@ -705,7 +708,7 @@ async def nx_get_footage(
 @mcp.tool()
 async def nx_ptz_get_position(
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get the current pan/tilt/zoom position of a PTZ camera."""
     return await get_client(system).ptz_get_position(device_id)
@@ -718,7 +721,7 @@ async def nx_ptz_set_position(
     pan: Annotated[Optional[float], Field(default=None, description="Pan (X-axis) position")] = None,
     tilt: Annotated[Optional[float], Field(default=None, description="Tilt (Y-axis) position")] = None,
     zoom: Annotated[Optional[float], Field(default=None, description="Zoom (Z-axis) position")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Move a PTZ camera to an absolute pan/tilt/zoom position."""
     return await get_client(system).ptz_set_position(
@@ -737,7 +740,7 @@ async def nx_ptz_move(
     tilt: Annotated[Optional[float], Field(default=None, description="Tilt speed (-1.0 to 1.0, negative=down, positive=up)")] = None,
     zoom: Annotated[Optional[float], Field(default=None, description="Zoom speed (-1.0 to 1.0, negative=out, positive=in)")] = None,
     focus: Annotated[Optional[float], Field(default=None, description="Focus speed (-1.0 to 1.0)")] = None,
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Start a continuous PTZ move. Speeds range from -1.0 (full left/down) to 1.0 (full right/up). Call nx_ptz_stop to halt."""
     return await get_client(system).ptz_move(
@@ -752,7 +755,7 @@ async def nx_ptz_move(
 @mcp.tool()
 async def nx_ptz_stop(
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Stop a continuous PTZ move on a camera."""
     return await get_client(system).ptz_stop(device_id)
@@ -761,7 +764,7 @@ async def nx_ptz_stop(
 @mcp.tool()
 async def nx_ptz_get_presets(
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
-    system: SYS = None,
+    system: SYS,
 ) -> list:
     """List all PTZ presets saved on a camera."""
     return await get_client(system).ptz_get_presets(device_id)
@@ -772,7 +775,7 @@ async def nx_ptz_activate_preset(
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
     preset_id: Annotated[str, Field(description="Preset UUID or ID")],
     speed: Annotated[float, Field(default=0.5, description="Movement speed (0.0 to 1.0, default 0.5)")] = 0.5,
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Move a PTZ camera to a saved preset position."""
     return await get_client(system).ptz_activate_preset(
@@ -789,7 +792,7 @@ async def nx_ptz_activate_preset(
 @mcp.tool()
 async def nx_virtual_list_uploads(
     device_id: Annotated[str, Field(description="Virtual device UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> list:
     """List active chunk-based uploads for a virtual camera device."""
     return await get_client(system).virtual_list_uploads(device_id)
@@ -799,7 +802,7 @@ async def nx_virtual_list_uploads(
 async def nx_virtual_start_upload(
     device_id: Annotated[str, Field(description="Virtual device UUID")],
     files: Annotated[list[dict], Field(description="List of file metadata objects. Each item: startTimeMs, durationMs, sizeB, md5, container, codec.")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Initiate one or more file uploads to a virtual camera. Provide a list of file metadata objects, each with: startTimeMs, durationMs, sizeB, md5, container, codec. Returns uploadId, chunkSizeB, and fileId for each upload session."""
     return await get_client(system).virtual_start_upload(device_id, files)
@@ -809,7 +812,7 @@ async def nx_virtual_start_upload(
 async def nx_virtual_get_upload_status(
     device_id: Annotated[str, Field(description="Virtual device UUID")],
     upload_id: Annotated[str, Field(description="Upload session UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get status of an in-progress virtual camera upload, including uploadProgressPercent and archiveProgressPercent."""
     return await get_client(system).virtual_get_upload_status(device_id, upload_id)
@@ -819,7 +822,7 @@ async def nx_virtual_get_upload_status(
 async def nx_virtual_cancel_upload(
     device_id: Annotated[str, Field(description="Virtual device UUID")],
     upload_id: Annotated[str, Field(description="Upload session UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Cancel an in-progress virtual camera upload."""
     return await get_client(system).virtual_cancel_upload(device_id, upload_id)
@@ -830,7 +833,7 @@ async def nx_virtual_cancel_upload(
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def nx_list_integrations(system: SYS = None) -> list:
+async def nx_list_integrations(system: SYS) -> list:
     """List all SDK analytics integrations installed on the server. Requires Power User permissions."""
     return await get_client(system).list_integrations()
 
@@ -838,7 +841,7 @@ async def nx_list_integrations(system: SYS = None) -> list:
 @mcp.tool()
 async def nx_get_integration(
     integration_id: Annotated[str, Field(description="Integration UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get details of a specific SDK analytics integration by ID. Requires Power User permissions."""
     return await get_client(system).get_integration(integration_id)
@@ -847,7 +850,7 @@ async def nx_get_integration(
 @mcp.tool()
 async def nx_delete_analytics_integration(
     integration_id: Annotated[str, Field(description="Integration UUID to remove")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Remove an SDK analytics integration from the server. This is destructive and cannot be undone."""
     return await get_client(system).delete_analytics_integration(integration_id)
@@ -860,7 +863,7 @@ async def nx_delete_analytics_integration(
 @mcp.tool()
 async def nx_get_device_io(
     device_id: Annotated[str, Field(description="Device UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get current IO port states for a device (e.g. door sensors, relays, alarm inputs/outputs)."""
     return await get_client(system).get_device_io(device_id)
@@ -870,7 +873,7 @@ async def nx_get_device_io(
 async def nx_set_device_io(
     device_id: Annotated[str, Field(description="Device UUID")],
     ports: Annotated[dict, Field(description='Map of port number to port state. Example: {"1": {"isActive": true}}')],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Set IO output port states on a device (e.g. trigger a relay or alarm output)."""
     return await get_client(system).set_device_io(device_id, ports)
@@ -879,7 +882,7 @@ async def nx_set_device_io(
 @mcp.tool()
 async def nx_get_device_status(
     device_id: Annotated[str, Field(description="Device UUID")],
-    system: SYS = None,
+    system: SYS,
 ) -> dict:
     """Get diagnostic/health status for a specific camera or device."""
     return await get_client(system).get_device_status(device_id)

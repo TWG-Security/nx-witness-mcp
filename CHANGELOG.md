@@ -9,6 +9,17 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [2.0.0] - 2026-04-01
+
+### Breaking Change
+- `system` parameter is now **required** on all tools (was optional, defaulting to the first configured system). This forces the caller to explicitly choose a system on every tool call, which fixes a UX/discoverability issue where Claude Desktop would silently omit the optional parameter and only ever query the default system. Call `nx_list_systems` first to discover available system names.
+
+### Changed
+- `nx_list_systems` docstring updated to prominently signal "call this first" so Claude Desktop knows to discover systems before issuing other tool calls
+- `_sys_desc()` updated to say "Required" instead of "Defaults to … if omitted"
+
 ### Fixed
 - `nx_start_device_search`: corrected credential field example from `pw_field` to `password` — the NX Witness API spec uses `pw_field` as a schema sentinel for write-only password fields, but the actual HTTP body key is `password`; using `pw_field` returned a 422 Unprocessable Entity
 - `nx_get_camera`: offline devices now return a structured error dict instead of an unhandled 404 exception; the response includes the device ID and guidance to use `nx_list_cameras` or `nx_start_device_search` for offline device info
