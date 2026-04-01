@@ -4,6 +4,7 @@
 import os
 from typing import Annotated, Optional
 
+import httpx
 from fastmcp import FastMCP
 from fastmcp.utilities.types import Image
 from pydantic import Field
@@ -102,7 +103,7 @@ async def nx_list_cameras(
     detailed: Annotated[bool, Field(default=False, description="If true, return full device objects instead of summary fields. Use this when you need firmware, parameters, or other detailed info for multiple devices at once.")] = False,
     system: SYS = None,
 ) -> list:
-    """List all cameras/devices. Returns id, name, status, vendor, model, URL, and firmware. Use detailed=true to get full device objects (all fields) — avoids calling nx_get_camera per device."""
+    """List all cameras/devices. Returns id, name, status, vendor, model, URL, and firmware. Use detailed=true to get full device objects (all fields) — avoids calling nx_get_camera per device. Note: the NX Witness API may omit offline devices in detailed mode on some server versions; summary mode (default) is the most reliable way to enumerate all devices including offline ones."""
     devices = await get_client(system).list_devices(device_type=device_type)
     if detailed:
         return devices
@@ -120,8 +121,25 @@ async def nx_get_camera(
     device_id: Annotated[str, Field(description="Device UUID")],
     system: SYS = None,
 ) -> dict:
-    """Get detailed information about a specific camera/device by its UUID."""
-    return await get_client(system).get_device(device_id)
+    """Get detailed information about a specific camera/device by its UUID.
+    Note: the NX Witness API returns 404 for offline devices. If that happens,
+    use nx_list_cameras (summary mode) to enumerate all devices including offline
+    ones, or run nx_start_device_search against the device IP to retrieve its
+    MAC/typeId."""
+    try:
+        return await get_client(system).get_device(device_id)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return {
+                "error": "not_found",
+                "device_id": device_id,
+                "message": (
+                    "Device not found — it may be offline or have been removed. "
+                    "Use nx_list_cameras (summary mode) to see all devices including offline ones. "
+                    "To retrieve MAC/typeId for an offline device, run nx_start_device_search against its IP."
+                ),
+            }
+        raise
 
 
 @mcp.tool()
@@ -196,7 +214,7 @@ async def nx_get_device_types(system: SYS = None) -> list:
 async def nx_start_device_search(
     target: Annotated[dict, Field(description='Search target. One of: {"ip": "192.168.1.1"} for single IP, {"startIp": "192.168.1.1", "endIp": "192.168.1.254"} for range, or {"url": "rtsp://..."} for URL')],
     port: Annotated[Optional[int], Field(default=None, description="Target port to scan")] = None,
-    credentials: Annotated[Optional[dict], Field(default=None, description='Credentials to try on found devices, e.g. {"user": "admin", "pw_field": "pass"}')] = None,
+    credentials: Annotated[Optional[dict], Field(default=None, description='Credentials to try on found devices, e.g. {"user": "admin", "password": "pass"}')] = None,
     mode: Annotated[Optional[str], Field(default=None, description="'waitResults' to block until search completes, 'addFoundDevices' to automatically add discovered cameras to the site")] = None,
     server_id: Annotated[Optional[str], Field(default=None, description="Server UUID to run the search on (defaults to current server)")] = None,
     system: SYS = None,
