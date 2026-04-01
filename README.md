@@ -17,7 +17,7 @@ NX Witness MCP exposes your NX Witness system as a set of Claude tools, allowing
 - Manage integrations and analytics engines
 - And much more — the full NX Witness REST API surface
 
-Multi-system support lets you connect to multiple NX Witness sites simultaneously and switch between them.
+Multi-system support lets you connect to multiple NX Witness sites simultaneously. Every tool requires a `system` parameter — call `nx_list_systems` first to discover available system names, then pass one to each subsequent tool call.
 
 ---
 
@@ -174,19 +174,7 @@ MIT
 
 ## Changelog
 
-### Unreleased
-- Added `nx_create_device` tool — creates a device record via `POST /rest/v4/devices` (physicalId, url, typeId required; name, serverId, mac, credentials, parameters, group, options, schedule, motion optional)
-- Fixed README tools table to accurately reflect implemented tools (removed ~20 tools listed but not implemented; added ~25 tools implemented but not listed)
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
-### Previous (undocumented)
-- Added device IO tools: `nx_get_device_io`, `nx_set_device_io`, `nx_get_device_status`
-- Added full event rules CRUD: `nx_get_rule`, `nx_replace_rule`, `nx_modify_rule`, `nx_delete_rule`, `nx_reset_rules`
-- Added event acknowledges: `nx_get_acknowledges`, `nx_acknowledge_event`, `nx_get_acknowledge`
-- Added soft trigger tools: `nx_get_triggers`, `nx_get_trigger`, `nx_fire_trigger`
-- Added event manifest tools: `nx_get_event_manifest_events`, `nx_get_event_manifest_actions`
-- Added bookmark delete: `nx_delete_bookmark`
-- Added PTZ set position and stop: `nx_ptz_set_position`, `nx_ptz_stop`
-- Added virtual camera upload tools: `nx_virtual_list_uploads`, `nx_virtual_start_upload`, `nx_virtual_get_upload_status`, `nx_virtual_cancel_upload`
-- Added analytics integration delete: `nx_delete_analytics_integration`
-- Added log settings: `nx_get_log_settings`
-- Added multi-system support via `nx_systems.json`
+### v2.0.0 (2026-04-01) — Breaking change
+- **`system` is now required** on all tools. Call `nx_list_systems` first to get available system names, then pass a system name to every subsequent tool call. This fixes a discoverability issue where Claude Desktop silently omitted the optional parameter and only queried the default system.
