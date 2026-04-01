@@ -1,6 +1,11 @@
 """ASGI middleware that aligns FastMCP Streamable HTTP transport behavior
 with the TypeScript @modelcontextprotocol/sdk:
 
+  - Handles OPTIONS (CORS preflight) with 204 No Content
+  - Normalizes error responses to match TypeScript SDK format:
+      GET  400 → plain text "No sessionId"
+      DELETE 404 → 400 plain text "No active transport"
+      POST 406 → JSON with id: null (not id: "server-error")
   - Injects id: fields into SSE events (required for Last-Event-ID reconnection
     and message tracking by some MCP clients)
   - Converts hex session IDs to UUID format
@@ -20,14 +25,35 @@ class MCPTransportMiddleware:
             await self.app(scope, receive, send)
             return
 
-        state = {"is_sse": False, "session_id": None, "counter": 0, "buf": b""}
+        # CORS preflight — must return 204 before FastMCP sees the request
+        if scope["method"] == "OPTIONS":
+            await send({"type": "http.response.start", "status": 204, "headers": []})
+            await send({"type": "http.response.body", "body": b""})
+            return
+
+        method = scope["method"]
+        state = {
+            "is_sse": False,
+            "session_id": None,
+            "counter": 0,
+            "buf": b"",
+            "status": None,
+            "deferred_start": None,
+        }
 
         async def patched_send(message):
             if message["type"] == "http.response.start":
                 headers, is_sse, sid = _patch_headers(message.get("headers", []))
                 state["is_sse"] = is_sse
                 state["session_id"] = sid or str(uuid.uuid4())
-                await send({**message, "headers": headers})
+                state["status"] = message["status"]
+                patched = {**message, "headers": headers}
+                if is_sse:
+                    # SSE: forward immediately so the client sees headers right away
+                    await send(patched)
+                else:
+                    # Buffer; we may need to rewrite status/headers/body together
+                    state["deferred_start"] = patched
 
             elif message["type"] == "http.response.body" and state["is_sse"]:
                 data = state["buf"] + message.get("body", b"")
@@ -38,10 +64,38 @@ class MCPTransportMiddleware:
                 state["counter"] += out.count(b"\n\n")
                 await send({**message, "body": out})
 
+            elif message["type"] == "http.response.body":
+                status = state["status"]
+                body = message.get("body", b"")
+                start = state["deferred_start"]
+
+                if method == "GET" and status == 400:
+                    start = {**start, "headers": _plain_text_headers()}
+                    body = b"No sessionId"
+                elif method == "DELETE" and status == 404:
+                    start = {**start, "status": 400, "headers": _plain_text_headers()}
+                    body = b"No active transport"
+                elif method == "POST" and status == 406:
+                    body = _fix_406_body(body)
+
+                if start:
+                    await send(start)
+                await send({**message, "body": body})
+
             else:
                 await send(message)
 
         await self.app(scope, receive, patched_send)
+
+
+def _plain_text_headers():
+    return [(b"content-type", b"text/plain")]
+
+
+def _fix_406_body(body: bytes) -> bytes:
+    # Replace "server-error" value with null in the JSON-RPC id field.
+    # Handles both compact ("id":"server-error") and spaced ("id": "server-error") forms.
+    return body.replace(b'"server-error"', b"null")
 
 
 def _patch_headers(raw_headers):
