@@ -41,6 +41,9 @@ class MCPTransportMiddleware:
                 await send({"type": "http.response.body", "body": b"No sessionId"})
                 return
 
+        # Normalize mcp-session-id from UUID format back to hex for FastMCP lookup
+        scope = {**scope, "headers": _patch_request_headers(scope.get("headers", []))}
+
         method = scope["method"]
         state = {
             "is_sse": False,
@@ -126,6 +129,17 @@ def _patch_headers(raw_headers):
                 is_sse = True
             result.append((name, value))
     return result, is_sse, session_id
+
+
+def _patch_request_headers(raw_headers):
+    """Strip UUID dashes from mcp-session-id so FastMCP sees its original hex format."""
+    result = []
+    for name, value in raw_headers:
+        if name.lower() == b"mcp-session-id":
+            result.append((name, value.decode().replace("-", "").encode()))
+        else:
+            result.append((name, value))
+    return result
 
 
 def _hex_to_uuid(hex_str: str) -> str:
