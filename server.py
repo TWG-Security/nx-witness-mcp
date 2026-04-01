@@ -158,6 +158,95 @@ async def nx_create_device(
 
 
 @mcp.tool()
+async def nx_replace_device(
+    device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
+    device: Annotated[dict, Field(description="Full device object. Required fields: physicalId, url, typeId. All other fields will be replaced.")],
+    system: SYS = None,
+) -> dict:
+    """Replace all fields of an existing device record (PUT). Must supply a complete device object including physicalId, url, and typeId."""
+    return await get_client(system).replace_device(device_id, device)
+
+
+@mcp.tool()
+async def nx_modify_device(
+    device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
+    changes: Annotated[dict, Field(description="Fields to update. Any subset of: name, url, typeId, mac, serverId, vendor, model, group, credentials, logicalId, isManuallyAdded, options, schedule, motion, parameters")],
+    system: SYS = None,
+) -> dict:
+    """Partially update an existing device record (PATCH). Only supply the fields you want to change."""
+    return await get_client(system).modify_device(device_id, changes)
+
+
+@mcp.tool()
+async def nx_delete_device(
+    device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
+    system: SYS = None,
+) -> dict:
+    """Delete a device from the NX Witness Site permanently."""
+    return await get_client(system).delete_device(device_id)
+
+
+@mcp.tool()
+async def nx_get_device_types(system: SYS = None) -> list:
+    """List all supported device driver types (camera drivers). Returns id, name, and manufacturer. Use the id as typeId when creating devices manually."""
+    return await get_client(system).get_device_types()
+
+
+@mcp.tool()
+async def nx_start_device_search(
+    target: Annotated[dict, Field(description='Search target. One of: {"ip": "192.168.1.1"} for single IP, {"startIp": "192.168.1.1", "endIp": "192.168.1.254"} for range, or {"url": "rtsp://..."} for URL')],
+    port: Annotated[Optional[int], Field(default=None, description="Target port to scan")] = None,
+    credentials: Annotated[Optional[dict], Field(default=None, description='Credentials to try on found devices, e.g. {"user": "admin", "pw_field": "pass"}')] = None,
+    mode: Annotated[Optional[str], Field(default=None, description="'waitResults' to block until search completes, 'addFoundDevices' to automatically add discovered cameras to the site")] = None,
+    server_id: Annotated[Optional[str], Field(default=None, description="Server UUID to run the search on (defaults to current server)")] = None,
+    system: SYS = None,
+) -> dict:
+    """Start a network scan to discover cameras/devices. Returns a search object with an id. Poll nx_get_device_search to check progress. Use mode='addFoundDevices' to auto-add cameras."""
+    return await get_client(system).start_device_search(
+        target=target, port=port, credentials=credentials, mode=mode, server_id=server_id
+    )
+
+
+@mcp.tool()
+async def nx_list_device_searches(system: SYS = None) -> list:
+    """List all device searches currently running or recently completed in the Site."""
+    return await get_client(system).list_device_searches()
+
+
+@mcp.tool()
+async def nx_get_device_search(
+    search_id: Annotated[str, Field(description="Device search ID returned by nx_start_device_search")],
+    system: SYS = None,
+) -> dict:
+    """Get the status and results of a specific device search. Check status.state: Init, CheckingOnline, CheckingHost, Finished, Aborted. Found cameras appear in the devices array."""
+    return await get_client(system).get_device_search(search_id)
+
+
+@mcp.tool()
+async def nx_stop_device_search(
+    search_id: Annotated[str, Field(description="Device search ID to stop and delete")],
+    system: SYS = None,
+) -> dict:
+    """Stop and delete a device search."""
+    return await get_client(system).stop_device_search(search_id)
+
+
+@mcp.tool()
+async def nx_get_device_diagnosis(
+    device_id: Annotated[str, Field(description="Device UUID")],
+    system: SYS = None,
+) -> dict:
+    """Get diagnostic information for a specific device. Returns status, init, stream, and media diagnostic fields."""
+    return await get_client(system).get_device_status(device_id)
+
+
+@mcp.tool()
+async def nx_get_all_devices_diagnosis(system: SYS = None) -> list:
+    """Get diagnostic information for all devices in the Site. Returns id, status, init, stream, and media fields for each device."""
+    return await get_client(system).get_all_devices_diagnosis()
+
+
+@mcp.tool()
 async def nx_camera_snapshot(
     device_id: Annotated[str, Field(description="Device UUID")],
     width: Annotated[Optional[int], Field(default=None, description="Optional width in pixels")] = None,

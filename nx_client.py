@@ -480,6 +480,49 @@ class NXClient:
             body["motion"] = motion
         return await self._post("/rest/v4/devices", body=body)
 
+    async def replace_device(self, device_id: str, device: dict) -> dict:
+        return await self._put(f"/rest/v4/devices/{device_id}", body=device)
+
+    async def modify_device(self, device_id: str, changes: dict) -> dict:
+        return await self._patch(f"/rest/v4/devices/{device_id}", body=changes)
+
+    async def delete_device(self, device_id: str) -> Any:
+        return await self._delete(f"/rest/v4/devices/{device_id}")
+
+    async def get_device_types(self) -> list[dict]:
+        return await self._get("/rest/v4/devices/*/types")
+
+    async def start_device_search(
+        self,
+        target: dict,
+        port: int | None = None,
+        credentials: dict | None = None,
+        mode: str | None = None,
+        server_id: str | None = None,
+    ) -> dict:
+        body: dict[str, Any] = {"target": target}
+        if port is not None:
+            body["port"] = port
+        if credentials is not None:
+            body["credentials"] = credentials
+        if mode is not None:
+            body["mode"] = mode
+        if server_id is not None:
+            body["serverId"] = server_id
+        return await self._post("/rest/v4/devices/*/searches", body=body)
+
+    async def list_device_searches(self) -> list[dict]:
+        return await self._get("/rest/v4/devices/*/searches")
+
+    async def get_device_search(self, search_id: str) -> dict:
+        return await self._get(f"/rest/v4/devices/*/searches/{search_id}")
+
+    async def stop_device_search(self, search_id: str) -> Any:
+        return await self._delete(f"/rest/v4/devices/*/searches/{search_id}")
+
+    async def get_all_devices_diagnosis(self) -> list[dict]:
+        return await self._get("/rest/v4/devices/*/status")
+
     # -------------------------------------------------------------------------
     # Virtual Device Uploads (v4, added in 6.1.1)
     # -------------------------------------------------------------------------
