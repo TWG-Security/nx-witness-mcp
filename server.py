@@ -750,4 +750,12 @@ async def nx_get_device_status(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    mcp.run()
+    import uvicorn
+    from middleware import MCPTransportMiddleware
+
+    host = os.environ.get("MCP_HOST", "0.0.0.0")
+    port = int(os.environ.get("MCP_PORT", "8000"))
+
+    inner = mcp.streamable_http_app()
+    app = MCPTransportMiddleware(inner)
+    uvicorn.run(app, host=host, port=port)
