@@ -125,6 +125,39 @@ async def nx_get_camera(
 
 
 @mcp.tool()
+async def nx_create_device(
+    physical_id: Annotated[str, Field(description="Device hardware identifier, e.g. '92-61-00-00-00-9F'")],
+    url: Annotated[str, Field(description="Device IP address or hostname, e.g. '192.168.0.1'")],
+    type_id: Annotated[str, Field(description="Device driver type UUID. Use GET /rest/v4/devices/*/types to look up type IDs")],
+    name: Annotated[Optional[str], Field(default=None, description="Display name for the device")] = None,
+    server_id: Annotated[Optional[str], Field(default=None, description="Server UUID to assign device to (defaults to current server)")] = None,
+    mac: Annotated[Optional[str], Field(default=None, description="Device MAC address")] = None,
+    credentials: Annotated[Optional[dict], Field(default=None, description='Device login credentials, e.g. {"user": "admin", "password": "pass"}')] = None,
+    parameters: Annotated[Optional[dict], Field(default=None, description="Device-specific key-value parameters")] = None,
+    group: Annotated[Optional[dict], Field(default=None, description='Device group assignment, e.g. {"id": "", "name": "Group 1"}')] = None,
+    options: Annotated[Optional[dict], Field(default=None, description="Advanced device options (isControlEnabled, isAudioEnabled, isDualStreamingDisabled, etc.)")] = None,
+    schedule: Annotated[Optional[dict], Field(default=None, description="Recording schedule configuration (isEnabled, tasks, minArchivePeriodS, maxArchivePeriodS)")] = None,
+    motion: Annotated[Optional[dict], Field(default=None, description="Motion detection settings (type, mask, recordBeforeS, recordAfterS)")] = None,
+    system: SYS = None,
+) -> dict:
+    """Create a new device record in the NX Witness Site. Note: does not verify device availability — use device search with addFoundDevices mode when possible. Returns the created device record including its assigned UUID."""
+    return await get_client(system).create_device(
+        physical_id=physical_id,
+        url=url,
+        type_id=type_id,
+        name=name,
+        server_id=server_id,
+        mac=mac,
+        credentials=credentials,
+        parameters=parameters,
+        group=group,
+        options=options,
+        schedule=schedule,
+        motion=motion,
+    )
+
+
+@mcp.tool()
 async def nx_camera_snapshot(
     device_id: Annotated[str, Field(description="Device UUID")],
     width: Annotated[Optional[int], Field(default=None, description="Optional width in pixels")] = None,

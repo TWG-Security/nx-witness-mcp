@@ -132,21 +132,21 @@ Restart Claude Code after adding the server. You should see the NX Witness tools
 
 | Category | Tools |
 |----------|-------|
-| Systems | `nx_list_systems`, `nx_server_info`, `nx_get_site_info`, `nx_list_servers` |
-| Cameras | `nx_list_cameras`, `nx_get_camera`, `nx_camera_snapshot`, `nx_camera_stream_url` |
-| Recording | `nx_get_footage`, `nx_get_recording_statistics` |
-| PTZ | `nx_ptz_move`, `nx_ptz_get_position`, `nx_ptz_get_presets`, `nx_ptz_activate_preset`, `nx_ptz_list_tours` |
-| Storage | `nx_list_storages`, `nx_get_storage_status`, `nx_get_storage_forecast`, `nx_add_storage` |
-| Users | `nx_list_users`, `nx_get_user`, `nx_create_user`, `nx_update_user`, `nx_delete_user` |
-| User Groups | `nx_list_user_groups`, `nx_get_user_group`, `nx_create_user_group`, `nx_update_user_group` |
-| Layouts | `nx_list_layouts`, `nx_get_layout`, `nx_create_layout`, `nx_update_layout` |
-| Video Walls | `nx_list_video_walls`, `nx_get_video_wall`, `nx_create_video_wall` |
-| Bookmarks | `nx_list_bookmarks`, `nx_get_bookmark`, `nx_create_bookmark`, `nx_update_bookmark` |
-| Events & Rules | `nx_get_events`, `nx_get_rules`, `nx_create_rule`, `nx_create_generic_event`, `nx_fire_trigger` |
-| Integrations | `nx_list_integrations`, `nx_get_integration`, `nx_list_analytics_engines` |
-| Metrics | `nx_get_metrics_values`, `nx_get_metrics_alarms`, `nx_get_metrics_rules` |
-| System | `nx_get_license`, `nx_get_server_log`, `nx_get_audit_log`, `nx_get_server_settings` |
-| Virtual Devices | `nx_list_all_virtual_devices`, `nx_create_virtual_device`, `nx_update_virtual_device` |
+| Systems | `nx_list_systems`, `nx_server_info`, `nx_list_servers` |
+| Cameras & Devices | `nx_list_cameras`, `nx_get_camera`, `nx_create_device`, `nx_get_device_status`, `nx_get_device_io`, `nx_set_device_io`, `nx_camera_snapshot`, `nx_camera_stream_url` |
+| Recording | `nx_get_footage` |
+| PTZ | `nx_ptz_get_position`, `nx_ptz_set_position`, `nx_ptz_move`, `nx_ptz_stop`, `nx_ptz_get_presets`, `nx_ptz_activate_preset` |
+| Storage | `nx_list_storages`, `nx_get_storage_status` |
+| Users | `nx_list_users` |
+| Bookmarks | `nx_list_bookmarks`, `nx_get_bookmark`, `nx_create_bookmark`, `nx_update_bookmark`, `nx_delete_bookmark` |
+| Events | `nx_get_events`, `nx_get_event_manifest_events`, `nx_get_event_manifest_actions` |
+| Acknowledges | `nx_get_acknowledges`, `nx_acknowledge_event`, `nx_get_acknowledge` |
+| Triggers | `nx_get_triggers`, `nx_get_trigger`, `nx_fire_trigger` |
+| Rules | `nx_get_rules`, `nx_get_rule`, `nx_create_rule`, `nx_replace_rule`, `nx_modify_rule`, `nx_delete_rule`, `nx_reset_rules` |
+| Generic Events | `nx_create_generic_event` |
+| Analytics & Integrations | `nx_list_analytics_engines`, `nx_list_integrations`, `nx_get_integration`, `nx_delete_analytics_integration` |
+| Virtual Uploads | `nx_virtual_list_uploads`, `nx_virtual_start_upload`, `nx_virtual_get_upload_status`, `nx_virtual_cancel_upload` |
+| Logs & Audit | `nx_get_log_settings`, `nx_get_server_log`, `nx_get_audit_log` |
 
 ---
 
@@ -161,3 +161,24 @@ Restart Claude Code after adding the server. You should see the NX Witness tools
 ## License
 
 MIT
+
+---
+
+## Changelog
+
+### Unreleased
+- Added `nx_create_device` tool — creates a device record via `POST /rest/v4/devices` (physicalId, url, typeId required; name, serverId, mac, credentials, parameters, group, options, schedule, motion optional)
+- Fixed README tools table to accurately reflect implemented tools (removed ~20 tools listed but not implemented; added ~25 tools implemented but not listed)
+
+### Previous (undocumented)
+- Added device IO tools: `nx_get_device_io`, `nx_set_device_io`, `nx_get_device_status`
+- Added full event rules CRUD: `nx_get_rule`, `nx_replace_rule`, `nx_modify_rule`, `nx_delete_rule`, `nx_reset_rules`
+- Added event acknowledges: `nx_get_acknowledges`, `nx_acknowledge_event`, `nx_get_acknowledge`
+- Added soft trigger tools: `nx_get_triggers`, `nx_get_trigger`, `nx_fire_trigger`
+- Added event manifest tools: `nx_get_event_manifest_events`, `nx_get_event_manifest_actions`
+- Added bookmark delete: `nx_delete_bookmark`
+- Added PTZ set position and stop: `nx_ptz_set_position`, `nx_ptz_stop`
+- Added virtual camera upload tools: `nx_virtual_list_uploads`, `nx_virtual_start_upload`, `nx_virtual_get_upload_status`, `nx_virtual_cancel_upload`
+- Added analytics integration delete: `nx_delete_analytics_integration`
+- Added log settings: `nx_get_log_settings`
+- Added multi-system support via `nx_systems.json`
