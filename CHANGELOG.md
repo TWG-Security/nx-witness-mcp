@@ -7,6 +7,18 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- `nx_start_device_search`: corrected credential field example from `pw_field` to `password` — the NX Witness API spec uses `pw_field` as a schema sentinel for write-only password fields, but the actual HTTP body key is `password`; using `pw_field` returned a 422 Unprocessable Entity
+- `nx_get_camera`: offline devices now return a structured error dict instead of an unhandled 404 exception; the response includes the device ID and guidance to use `nx_list_cameras` or `nx_start_device_search` for offline device info
+- `nx_list_cameras`: updated docstring to note that `detailed=true` may silently omit offline devices on some NX Witness server versions; summary mode is the reliable path for enumerating all devices
+
+### Documentation
+- Added namespace clarification to README: explains that this server registers as `"nx-witness"` and that having a second NX connector registered simultaneously creates two independent namespaces with independent permission settings
+
+---
+
 ## [1.0.0] - 2026-03-31
 
 ### Added

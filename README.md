@@ -126,6 +126,14 @@ claude mcp add nx-witness python /absolute/path/to/nx-meta-mcp/server.py
 
 Restart Claude Code after adding the server. You should see the NX Witness tools available in Claude.
 
+### A note on namespaces
+
+This server registers itself as `"nx-witness"`. All tools appear in Claude Code under the `mcp__nx-witness__` prefix (e.g. `mcp__nx-witness__nx_list_cameras`).
+
+Some NX Witness installations also expose a built-in MCP connector (sometimes listed as `"NXWitness"` or `"nx-meta"` in Claude Code's connector settings). If both this server and a built-in connector are registered simultaneously, the tools appear in **two independent namespaces** with **independent permission settings** — which can cause confusion about which namespace to use or why enabling one doesn't affect the other.
+
+**Recommendation:** Use only one MCP integration at a time. For full tool coverage and multi-system support, use this server exclusively and remove or disable any other NX Witness connectors.
+
 ---
 
 ## Available Tools
