@@ -3,7 +3,7 @@ with the TypeScript @modelcontextprotocol/sdk:
 
   - Handles OPTIONS (CORS preflight) with 204 No Content
   - Normalizes error responses to match TypeScript SDK format:
-      GET  400 → plain text "No sessionId"
+      GET (no session) → 400 plain text "No sessionId"
       DELETE 404 → 400 plain text "No active transport"
       POST 406 → JSON with id: null (not id: "server-error")
   - Injects id: fields into SSE events (required for Last-Event-ID reconnection
@@ -30,6 +30,16 @@ class MCPTransportMiddleware:
             await send({"type": "http.response.start", "status": 204, "headers": []})
             await send({"type": "http.response.body", "body": b""})
             return
+
+        # GET without mcp-session-id — FastMCP would 406 on Accept-header validation
+        # before reaching the session check; short-circuit to match CW's 400 response
+        if scope["method"] == "GET":
+            req_headers = {k.lower(): v for k, v in scope.get("headers", [])}
+            if b"mcp-session-id" not in req_headers:
+                await send({"type": "http.response.start", "status": 400,
+                            "headers": _plain_text_headers()})
+                await send({"type": "http.response.body", "body": b"No sessionId"})
+                return
 
         method = scope["method"]
         state = {
@@ -69,10 +79,7 @@ class MCPTransportMiddleware:
                 body = message.get("body", b"")
                 start = state["deferred_start"]
 
-                if method == "GET" and status == 400:
-                    start = {**start, "headers": _plain_text_headers()}
-                    body = b"No sessionId"
-                elif method == "DELETE" and status == 404:
+                if method == "DELETE" and status == 404:
                     start = {**start, "status": 400, "headers": _plain_text_headers()}
                     body = b"No active transport"
                 elif method == "POST" and status == 406:
