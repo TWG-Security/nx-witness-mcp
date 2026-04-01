@@ -440,6 +440,46 @@ class NXClient:
     async def get_device_status(self, device_id: str) -> dict:
         return await self._get(f"/rest/v4/devices/{device_id}/status")
 
+    async def create_device(
+        self,
+        physical_id: str,
+        url: str,
+        type_id: str,
+        name: str | None = None,
+        server_id: str | None = None,
+        mac: str | None = None,
+        credentials: dict | None = None,
+        parameters: dict | None = None,
+        group: dict | None = None,
+        options: dict | None = None,
+        schedule: dict | None = None,
+        motion: dict | None = None,
+    ) -> dict:
+        body: dict[str, Any] = {
+            "physicalId": physical_id,
+            "url": url,
+            "typeId": type_id,
+        }
+        if name is not None:
+            body["name"] = name
+        if server_id is not None:
+            body["serverId"] = server_id
+        if mac is not None:
+            body["mac"] = mac
+        if credentials is not None:
+            body["credentials"] = credentials
+        if parameters is not None:
+            body["parameters"] = parameters
+        if group is not None:
+            body["group"] = group
+        if options is not None:
+            body["options"] = options
+        if schedule is not None:
+            body["schedule"] = schedule
+        if motion is not None:
+            body["motion"] = motion
+        return await self._post("/rest/v4/devices", body=body)
+
     # -------------------------------------------------------------------------
     # Virtual Device Uploads (v4, added in 6.1.1)
     # -------------------------------------------------------------------------
