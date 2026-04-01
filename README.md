@@ -176,5 +176,8 @@ MIT
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
+### v2.0.1 (2026-04-01)
+- Fixed `SyntaxError: non-default argument follows default argument` on import — `system: SYS` is now the first parameter in all 18 affected tool functions.
+
 ### v2.0.0 (2026-04-01) — Breaking change
 - **`system` is now required** on all tools. Call `nx_list_systems` first to get available system names, then pass a system name to every subsequent tool call. This fixes a discoverability issue where Claude Desktop silently omitted the optional parameter and only queried the default system.

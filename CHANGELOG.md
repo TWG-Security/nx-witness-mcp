@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.0.1] - 2026-04-01
+
+### Fixed
+- Moved `system: SYS` parameter to first position in all 18 tool functions where it followed parameters with default values, causing `SyntaxError: non-default argument follows default argument` on import (`nx_list_cameras`, `nx_create_device`, `nx_start_device_search`, `nx_camera_snapshot`, `nx_get_events`, `nx_get_log_settings`, `nx_get_server_log`, `nx_get_audit_log`, `nx_acknowledge_event`, `nx_create_generic_event`, `nx_fire_trigger`, `nx_list_bookmarks`, `nx_create_bookmark`, `nx_update_bookmark`, `nx_get_footage`, `nx_ptz_set_position`, `nx_ptz_move`, `nx_ptz_activate_preset`).
+
+---
+
 ## [2.0.0] - 2026-04-01
 
 ### Breaking Change
