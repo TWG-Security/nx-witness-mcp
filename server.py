@@ -81,8 +81,8 @@ SYS = Annotated[str, Field(description=_sys_desc())]
 # Tools — System Management
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_list_systems() -> dict:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_list_systems() -> dict:
     """List all NX Witness systems configured on this MCP server.
     IMPORTANT: Call this tool first before any other nx_ tool. Multiple systems
     may be configured and every other tool requires a system name. Use the
@@ -94,19 +94,19 @@ async def nx_list_systems() -> dict:
 # Tools — Servers & Devices
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_server_info(system: SYS) -> dict:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_server_info(system: SYS) -> dict:
     """Get NX Witness server information including name, version, and system details."""
     return await get_client(system).get_server_info()
 
 
-@mcp.tool()
-async def nx_list_cameras(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_list_cameras(
     system: SYS,
     device_type: Annotated[Optional[str], Field(default=None, description="Optional filter (e.g. 'camera', 'ioModule')")] = None,
     detailed: Annotated[bool, Field(default=False, description="If true, return full device objects instead of summary fields. Use this when you need firmware, parameters, or other detailed info for multiple devices at once.")] = False,
 ) -> list:
-    """List all cameras/devices. Returns id, name, status, vendor, model, URL, and firmware. Use detailed=true to get full device objects (all fields) — avoids calling nx_get_camera per device. Note: the NX Witness API may omit offline devices in detailed mode on some server versions; summary mode (default) is the most reliable way to enumerate all devices including offline ones."""
+    """List all cameras/devices. Returns id, name, status, vendor, model, URL, and firmware. Use detailed=true to get full device objects (all fields) — avoids calling nx_read_get_camera per device. Note: the NX Witness API may omit offline devices in detailed mode on some server versions; summary mode (default) is the most reliable way to enumerate all devices including offline ones."""
     devices = await get_client(system).list_devices(device_type=device_type)
     if detailed:
         return devices
@@ -119,15 +119,15 @@ async def nx_list_cameras(
     } for d in devices]
 
 
-@mcp.tool()
-async def nx_get_camera(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_camera(
     device_id: Annotated[str, Field(description="Device UUID")],
     system: SYS,
 ) -> dict:
     """Get detailed information about a specific camera/device by its UUID.
     Note: the NX Witness API returns 404 for offline devices. If that happens,
-    use nx_list_cameras (summary mode) to enumerate all devices including offline
-    ones, or run nx_start_device_search against the device IP to retrieve its
+    use nx_read_list_cameras (summary mode) to enumerate all devices including offline
+    ones, or run nx_write_start_device_search against the device IP to retrieve its
     MAC/typeId."""
     try:
         return await get_client(system).get_device(device_id)
@@ -138,15 +138,15 @@ async def nx_get_camera(
                 "device_id": device_id,
                 "message": (
                     "Device not found — it may be offline or have been removed. "
-                    "Use nx_list_cameras (summary mode) to see all devices including offline ones. "
-                    "To retrieve MAC/typeId for an offline device, run nx_start_device_search against its IP."
+                    "Use nx_read_list_cameras (summary mode) to see all devices including offline ones. "
+                    "To retrieve MAC/typeId for an offline device, run nx_write_start_device_search against its IP."
                 ),
             }
         raise
 
 
-@mcp.tool()
-async def nx_create_device(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_create_device(
     system: SYS,
     physical_id: Annotated[str, Field(description="Device hardware identifier, e.g. '92-61-00-00-00-9F'")],
     url: Annotated[str, Field(description="Device IP address or hostname, e.g. '192.168.0.1'")],
@@ -178,8 +178,8 @@ async def nx_create_device(
     )
 
 
-@mcp.tool()
-async def nx_replace_device(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_update_replace_device(
     device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
     device: Annotated[dict, Field(description="Full device object. Required fields: physicalId, url, typeId. All other fields will be replaced.")],
     system: SYS,
@@ -188,8 +188,8 @@ async def nx_replace_device(
     return await get_client(system).replace_device(device_id, device)
 
 
-@mcp.tool()
-async def nx_modify_device(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_update_modify_device(
     device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
     changes: Annotated[dict, Field(description="Fields to update. Any subset of: name, url, typeId, mac, serverId, vendor, model, group, credentials, logicalId, isManuallyAdded, options, schedule, motion, parameters")],
     system: SYS,
@@ -198,7 +198,7 @@ async def nx_modify_device(
     return await get_client(system).modify_device(device_id, changes)
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": False})
 async def nx_delete_device(
     device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
     system: SYS,
@@ -207,14 +207,14 @@ async def nx_delete_device(
     return await get_client(system).delete_device(device_id)
 
 
-@mcp.tool()
-async def nx_get_device_types(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_device_types(system: SYS) -> list:
     """List all supported device driver types (camera drivers). Returns id, name, and manufacturer. Use the id as typeId when creating devices manually."""
     return await get_client(system).get_device_types()
 
 
-@mcp.tool()
-async def nx_start_device_search(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_start_device_search(
     system: SYS,
     target: Annotated[dict, Field(description='Search target. One of: {"ip": "192.168.1.1"} for single IP, {"startIp": "192.168.1.1", "endIp": "192.168.1.254"} for range, or {"url": "rtsp://..."} for URL')],
     port: Annotated[Optional[int], Field(default=None, description="Target port to scan")] = None,
@@ -222,29 +222,29 @@ async def nx_start_device_search(
     mode: Annotated[Optional[str], Field(default=None, description="'waitResults' to block until search completes, 'addFoundDevices' to automatically add discovered cameras to the site")] = None,
     server_id: Annotated[Optional[str], Field(default=None, description="Server UUID to run the search on (defaults to current server)")] = None,
 ) -> dict:
-    """Start a network scan to discover cameras/devices. Returns a search object with an id. Poll nx_get_device_search to check progress. Use mode='addFoundDevices' to auto-add cameras."""
+    """Start a network scan to discover cameras/devices. Returns a search object with an id. Poll nx_read_get_device_search to check progress. Use mode='addFoundDevices' to auto-add cameras."""
     return await get_client(system).start_device_search(
         target=target, port=port, credentials=credentials, mode=mode, server_id=server_id
     )
 
 
-@mcp.tool()
-async def nx_list_device_searches(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_list_device_searches(system: SYS) -> list:
     """List all device searches currently running or recently completed in the Site."""
     return await get_client(system).list_device_searches()
 
 
-@mcp.tool()
-async def nx_get_device_search(
-    search_id: Annotated[str, Field(description="Device search ID returned by nx_start_device_search")],
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_device_search(
+    search_id: Annotated[str, Field(description="Device search ID returned by nx_write_start_device_search")],
     system: SYS,
 ) -> dict:
     """Get the status and results of a specific device search. Check status.state: Init, CheckingOnline, CheckingHost, Finished, Aborted. Found cameras appear in the devices array."""
     return await get_client(system).get_device_search(search_id)
 
 
-@mcp.tool()
-async def nx_stop_device_search(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_delete_stop_device_search(
     search_id: Annotated[str, Field(description="Device search ID to stop and delete")],
     system: SYS,
 ) -> dict:
@@ -252,8 +252,8 @@ async def nx_stop_device_search(
     return await get_client(system).stop_device_search(search_id)
 
 
-@mcp.tool()
-async def nx_get_device_diagnosis(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_device_diagnosis(
     device_id: Annotated[str, Field(description="Device UUID")],
     system: SYS,
 ) -> dict:
@@ -261,14 +261,14 @@ async def nx_get_device_diagnosis(
     return await get_client(system).get_device_status(device_id)
 
 
-@mcp.tool()
-async def nx_get_all_devices_diagnosis(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_all_devices_diagnosis(system: SYS) -> list:
     """Get diagnostic information for all devices in the Site. Returns id, status, init, stream, and media fields for each device."""
     return await get_client(system).get_all_devices_diagnosis()
 
 
-@mcp.tool()
-async def nx_camera_snapshot(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_camera_snapshot(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID")],
     width: Annotated[Optional[int], Field(default=None, description="Optional width in pixels")] = None,
@@ -279,8 +279,8 @@ async def nx_camera_snapshot(
     return Image(data=b64, format="jpeg")
 
 
-@mcp.tool()
-async def nx_camera_stream_url(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_camera_stream_url(
     device_id: Annotated[str, Field(description="Device UUID")],
     system: SYS,
 ) -> str:
@@ -292,8 +292,8 @@ async def nx_camera_stream_url(
 # Tools — Event Log
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_get_events(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_events(
     system: SYS,
     limit: Annotated[int, Field(default=50, description="Max events to return (default 50)")] = 50,
     event_type: Annotated[Optional[str], Field(default=None, description="Filter by event type e.g. 'cameraMotion', 'cameraDisconnect', 'serverFailure', 'analyticsObject', 'analyticsSdkEvent'")] = None,
@@ -327,8 +327,8 @@ async def nx_get_events(
 # Tools — Server Logs
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_get_log_settings(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_log_settings(
     system: SYS,
     server_id: Annotated[str, Field(default="this", description="Server UUID or 'this' (default) for the current server")] = "this",
 ) -> dict:
@@ -336,8 +336,8 @@ async def nx_get_log_settings(
     return await get_client(system).get_log_settings(server_id)
 
 
-@mcp.tool()
-async def nx_get_server_log(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_server_log(
     system: SYS,
     name: Annotated[str, Field(default="MAIN", description="Log name: 'MAIN' (default), 'HTTP', or 'SYSTEM'")] = "MAIN",
     lines: Annotated[int, Field(default=200, description="Number of lines to return (default 200)")] = 200,
@@ -350,8 +350,8 @@ async def nx_get_server_log(
 # Tools — Audit Log
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_get_audit_log(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_audit_log(
     system: SYS,
     limit: Annotated[int, Field(default=50, description="Max entries to return (default 50)")] = 50,
     event_type: Annotated[Optional[str], Field(default=None, description="Filter by event type e.g. 'AR_Login', 'AR_UnauthorizedLogin', 'AR_SettingsChange'")] = None,
@@ -373,14 +373,14 @@ async def nx_get_audit_log(
 # Tools — Event Manifest
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_get_event_manifest_events(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_event_manifest_events(system: SYS) -> list:
     """Get the manifest of all available event types supported by this NX Witness server."""
     return await get_client(system).get_event_manifest_events()
 
 
-@mcp.tool()
-async def nx_get_event_manifest_actions(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_event_manifest_actions(system: SYS) -> list:
     """Get the manifest of all available action types that can be triggered by event rules."""
     return await get_client(system).get_event_manifest_actions()
 
@@ -389,14 +389,14 @@ async def nx_get_event_manifest_actions(system: SYS) -> list:
 # Tools — Acknowledges
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_get_acknowledges(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_acknowledges(system: SYS) -> list:
     """Get all event notifications that require acknowledgement."""
     return await get_client(system).get_acknowledges()
 
 
-@mcp.tool()
-async def nx_acknowledge_event(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_acknowledge_event(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID from the event")],
     action_id: Annotated[str, Field(description="Action ID from the event's actionData.id")],
@@ -416,8 +416,8 @@ async def nx_acknowledge_event(
     )
 
 
-@mcp.tool()
-async def nx_get_acknowledge(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_acknowledge(
     ack_id: Annotated[str, Field(description="Acknowledgement ID")],
     system: SYS,
 ) -> dict:
@@ -429,8 +429,8 @@ async def nx_get_acknowledge(
 # Tools — Generic Events
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_create_generic_event(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_create_generic_event(
     system: SYS,
     source: Annotated[str, Field(description="Event source identifier string")],
     caption: Annotated[Optional[str], Field(default=None, description="Short event title")] = None,
@@ -452,14 +452,14 @@ async def nx_create_generic_event(
 # Tools — Soft Triggers
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_get_triggers(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_triggers(system: SYS) -> list:
     """List all software (soft) triggers configured on the NX Witness server."""
     return await get_client(system).get_triggers()
 
 
-@mcp.tool()
-async def nx_get_trigger(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_trigger(
     trigger_id: Annotated[str, Field(description="Trigger UUID")],
     system: SYS,
 ) -> dict:
@@ -467,8 +467,8 @@ async def nx_get_trigger(
     return await get_client(system).get_trigger(trigger_id)
 
 
-@mcp.tool()
-async def nx_fire_trigger(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_fire_trigger(
     system: SYS,
     trigger_id: Annotated[str, Field(description="Trigger UUID to fire")],
     device_id: Annotated[Optional[str], Field(default=None, description="Optional device UUID to associate with the trigger")] = None,
@@ -486,14 +486,14 @@ async def nx_fire_trigger(
 # Tools — Event Rules
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_get_rules(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_rules(system: SYS) -> list:
     """List all event rules configured on the NX Witness server."""
     return await get_client(system).get_rules()
 
 
-@mcp.tool()
-async def nx_get_rule(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_rule(
     rule_id: Annotated[str, Field(description="Rule UUID")],
     system: SYS,
 ) -> dict:
@@ -501,8 +501,8 @@ async def nx_get_rule(
     return await get_client(system).get_rule(rule_id)
 
 
-@mcp.tool()
-async def nx_create_rule(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_create_rule(
     rule: Annotated[dict, Field(description="Full rule definition object")],
     system: SYS,
 ) -> dict:
@@ -510,8 +510,8 @@ async def nx_create_rule(
     return await get_client(system).create_rule(rule)
 
 
-@mcp.tool()
-async def nx_replace_rule(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_update_replace_rule(
     rule_id: Annotated[str, Field(description="Rule UUID")],
     rule: Annotated[dict, Field(description="Full replacement rule object")],
     system: SYS,
@@ -520,8 +520,8 @@ async def nx_replace_rule(
     return await get_client(system).replace_rule(rule_id, rule)
 
 
-@mcp.tool()
-async def nx_modify_rule(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_update_modify_rule(
     rule_id: Annotated[str, Field(description="Rule UUID")],
     changes: Annotated[dict, Field(description="Fields to update")],
     system: SYS,
@@ -530,7 +530,7 @@ async def nx_modify_rule(
     return await get_client(system).modify_rule(rule_id, changes)
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": False})
 async def nx_delete_rule(
     rule_id: Annotated[str, Field(description="Rule UUID to delete")],
     system: SYS,
@@ -539,8 +539,8 @@ async def nx_delete_rule(
     return await get_client(system).delete_rule(rule_id)
 
 
-@mcp.tool()
-async def nx_reset_rules(system: SYS) -> dict:
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_reset_rules(system: SYS) -> dict:
     """Reset ALL event rules to factory defaults. This is destructive and cannot be undone."""
     return await get_client(system).reset_rules()
 
@@ -549,15 +549,15 @@ async def nx_reset_rules(system: SYS) -> dict:
 # Tools — Analytics & Users
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_list_analytics_engines(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_list_analytics_engines(system: SYS) -> list:
     """List all analytics engines (AI/ML plugins) installed on the server."""
     engines = await get_client(system).list_analytics_engines()
     return [{"id": e.get("id"), "name": e.get("name"), "version": e.get("version"), "pluginId": e.get("pluginId")} for e in engines]
 
 
-@mcp.tool()
-async def nx_list_users(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_list_users(system: SYS) -> list:
     """List all users configured in the NX Witness system."""
     users = await get_client(system).list_users()
     return [{"id": u.get("id"), "name": u.get("name"), "email": u.get("email"), "isEnabled": u.get("isEnabled")} for u in users]
@@ -567,14 +567,14 @@ async def nx_list_users(system: SYS) -> list:
 # Tools — Servers (Extended)
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_list_servers(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_list_servers(system: SYS) -> list:
     """List all servers in the NX Witness site with their IDs, names, URLs, and status."""
     return await get_client(system).list_servers()
 
 
-@mcp.tool()
-async def nx_list_storages(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_list_storages(
     server_id: Annotated[str, Field(description="Server UUID")],
     system: SYS,
 ) -> list:
@@ -582,8 +582,8 @@ async def nx_list_storages(
     return await get_client(system).list_storages(server_id)
 
 
-@mcp.tool()
-async def nx_get_storage_status(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_storage_status(
     server_id: Annotated[str, Field(description="Server UUID")],
     storage_id: Annotated[str, Field(description="Storage UUID")],
     system: SYS,
@@ -596,8 +596,8 @@ async def nx_get_storage_status(
 # Tools — Bookmarks
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_list_bookmarks(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_list_bookmarks(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID")],
     start_time_ms: Annotated[Optional[int], Field(default=None, description="Filter bookmarks starting after this time (Unix ms)")] = None,
@@ -615,8 +615,8 @@ async def nx_list_bookmarks(
     )
 
 
-@mcp.tool()
-async def nx_create_bookmark(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_create_bookmark(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID")],
     name: Annotated[str, Field(description="Bookmark name/title")],
@@ -636,8 +636,8 @@ async def nx_create_bookmark(
     )
 
 
-@mcp.tool()
-async def nx_get_bookmark(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_bookmark(
     device_id: Annotated[str, Field(description="Device UUID")],
     bookmark_id: Annotated[str, Field(description="Bookmark UUID")],
     system: SYS,
@@ -646,7 +646,7 @@ async def nx_get_bookmark(
     return await get_client(system).get_bookmark(device_id, bookmark_id)
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": False})
 async def nx_update_bookmark(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID")],
@@ -669,7 +669,7 @@ async def nx_update_bookmark(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": False})
 async def nx_delete_bookmark(
     bookmark_id: Annotated[str, Field(description="Bookmark UUID")],
     system: SYS,
@@ -682,8 +682,8 @@ async def nx_delete_bookmark(
 # Tools — Footage
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_get_footage(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_footage(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID")],
     start_time_ms: Annotated[Optional[int], Field(default=None, description="Start of time range (Unix ms)")] = None,
@@ -705,8 +705,8 @@ async def nx_get_footage(
 # Tools — PTZ Control
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_ptz_get_position(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_ptz_get_position(
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
     system: SYS,
 ) -> dict:
@@ -714,8 +714,8 @@ async def nx_ptz_get_position(
     return await get_client(system).ptz_get_position(device_id)
 
 
-@mcp.tool()
-async def nx_ptz_set_position(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_ptz_set_position(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
     speed: Annotated[float, Field(description="Movement speed (0.0 to 1.0)")],
@@ -733,8 +733,8 @@ async def nx_ptz_set_position(
     )
 
 
-@mcp.tool()
-async def nx_ptz_move(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_ptz_move(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
     pan: Annotated[Optional[float], Field(default=None, description="Pan speed (-1.0 to 1.0, negative=left, positive=right)")] = None,
@@ -742,7 +742,7 @@ async def nx_ptz_move(
     zoom: Annotated[Optional[float], Field(default=None, description="Zoom speed (-1.0 to 1.0, negative=out, positive=in)")] = None,
     focus: Annotated[Optional[float], Field(default=None, description="Focus speed (-1.0 to 1.0)")] = None,
 ) -> dict:
-    """Start a continuous PTZ move. Speeds range from -1.0 (full left/down) to 1.0 (full right/up). Call nx_ptz_stop to halt."""
+    """Start a continuous PTZ move. Speeds range from -1.0 (full left/down) to 1.0 (full right/up). Call nx_delete_ptz_stop to halt."""
     return await get_client(system).ptz_move(
         device_id=device_id,
         pan=pan,
@@ -752,8 +752,8 @@ async def nx_ptz_move(
     )
 
 
-@mcp.tool()
-async def nx_ptz_stop(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_delete_ptz_stop(
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
     system: SYS,
 ) -> dict:
@@ -761,8 +761,8 @@ async def nx_ptz_stop(
     return await get_client(system).ptz_stop(device_id)
 
 
-@mcp.tool()
-async def nx_ptz_get_presets(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_ptz_get_presets(
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
     system: SYS,
 ) -> list:
@@ -770,8 +770,8 @@ async def nx_ptz_get_presets(
     return await get_client(system).ptz_get_presets(device_id)
 
 
-@mcp.tool()
-async def nx_ptz_activate_preset(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_ptz_activate_preset(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
     preset_id: Annotated[str, Field(description="Preset UUID or ID")],
@@ -789,8 +789,8 @@ async def nx_ptz_activate_preset(
 # Tools — Virtual Device Uploads (v4, added in 6.1.1)
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_virtual_list_uploads(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_virtual_list_uploads(
     device_id: Annotated[str, Field(description="Virtual device UUID")],
     system: SYS,
 ) -> list:
@@ -798,8 +798,8 @@ async def nx_virtual_list_uploads(
     return await get_client(system).virtual_list_uploads(device_id)
 
 
-@mcp.tool()
-async def nx_virtual_start_upload(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_write_virtual_start_upload(
     device_id: Annotated[str, Field(description="Virtual device UUID")],
     files: Annotated[list[dict], Field(description="List of file metadata objects. Each item: startTimeMs, durationMs, sizeB, md5, container, codec.")],
     system: SYS,
@@ -808,8 +808,8 @@ async def nx_virtual_start_upload(
     return await get_client(system).virtual_start_upload(device_id, files)
 
 
-@mcp.tool()
-async def nx_virtual_get_upload_status(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_virtual_get_upload_status(
     device_id: Annotated[str, Field(description="Virtual device UUID")],
     upload_id: Annotated[str, Field(description="Upload session UUID")],
     system: SYS,
@@ -818,8 +818,8 @@ async def nx_virtual_get_upload_status(
     return await get_client(system).virtual_get_upload_status(device_id, upload_id)
 
 
-@mcp.tool()
-async def nx_virtual_cancel_upload(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_delete_virtual_cancel_upload(
     device_id: Annotated[str, Field(description="Virtual device UUID")],
     upload_id: Annotated[str, Field(description="Upload session UUID")],
     system: SYS,
@@ -832,14 +832,14 @@ async def nx_virtual_cancel_upload(
 # Tools — Analytics Integrations
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_list_integrations(system: SYS) -> list:
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_list_integrations(system: SYS) -> list:
     """List all SDK analytics integrations installed on the server. Requires Power User permissions."""
     return await get_client(system).list_integrations()
 
 
-@mcp.tool()
-async def nx_get_integration(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_integration(
     integration_id: Annotated[str, Field(description="Integration UUID")],
     system: SYS,
 ) -> dict:
@@ -847,7 +847,7 @@ async def nx_get_integration(
     return await get_client(system).get_integration(integration_id)
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": False})
 async def nx_delete_analytics_integration(
     integration_id: Annotated[str, Field(description="Integration UUID to remove")],
     system: SYS,
@@ -860,8 +860,8 @@ async def nx_delete_analytics_integration(
 # Tools — Device IO & Status
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-async def nx_get_device_io(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_device_io(
     device_id: Annotated[str, Field(description="Device UUID")],
     system: SYS,
 ) -> dict:
@@ -869,8 +869,8 @@ async def nx_get_device_io(
     return await get_client(system).get_device_io(device_id)
 
 
-@mcp.tool()
-async def nx_set_device_io(
+@mcp.tool(annotations={"readOnlyHint": False})
+async def nx_update_set_device_io(
     device_id: Annotated[str, Field(description="Device UUID")],
     ports: Annotated[dict, Field(description='Map of port number to port state. Example: {"1": {"isActive": true}}')],
     system: SYS,
@@ -879,8 +879,8 @@ async def nx_set_device_io(
     return await get_client(system).set_device_io(device_id, ports)
 
 
-@mcp.tool()
-async def nx_get_device_status(
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_device_status(
     device_id: Annotated[str, Field(description="Device UUID")],
     system: SYS,
 ) -> dict:
