@@ -17,7 +17,7 @@ NX Witness MCP exposes your NX Witness system as a set of Claude tools, allowing
 - Manage integrations and analytics engines
 - And much more — the full NX Witness REST API surface
 
-Multi-system support lets you connect to multiple NX Witness sites simultaneously. Every tool requires a `system` parameter — call `nx_list_systems` first to discover available system names, then pass one to each subsequent tool call.
+Multi-system support lets you connect to multiple NX Witness sites simultaneously. Every tool requires a `system` parameter — call `nx_read_list_systems` first to discover available system names, then pass one to each subsequent tool call.
 
 ---
 
@@ -128,7 +128,7 @@ Restart Claude Code after adding the server. You should see the NX Witness tools
 
 ### A note on namespaces
 
-This server registers itself as `"nx-witness"`. All tools appear in Claude Code under the `mcp__nx-witness__` prefix (e.g. `mcp__nx-witness__nx_list_cameras`).
+This server registers itself as `"nx-witness"`. All tools appear in Claude Code under the `mcp__nx-witness__` prefix (e.g. `mcp__nx-witness__nx_read_list_cameras`).
 
 Some NX Witness installations also expose a built-in MCP connector (sometimes listed as `"NXWitness"` or `"nx-meta"` in Claude Code's connector settings). If both this server and a built-in connector are registered simultaneously, the tools appear in **two independent namespaces** with **independent permission settings** — which can cause confusion about which namespace to use or why enabling one doesn't affect the other.
 
@@ -140,21 +140,22 @@ Some NX Witness installations also expose a built-in MCP connector (sometimes li
 
 | Category | Tools |
 |----------|-------|
-| Systems | `nx_list_systems`, `nx_server_info`, `nx_list_servers` |
-| Cameras & Devices | `nx_list_cameras`, `nx_get_camera`, `nx_create_device`, `nx_get_device_status`, `nx_get_device_io`, `nx_set_device_io`, `nx_camera_snapshot`, `nx_camera_stream_url` |
-| Recording | `nx_get_footage` |
-| PTZ | `nx_ptz_get_position`, `nx_ptz_set_position`, `nx_ptz_move`, `nx_ptz_stop`, `nx_ptz_get_presets`, `nx_ptz_activate_preset` |
-| Storage | `nx_list_storages`, `nx_get_storage_status` |
-| Users | `nx_list_users` |
-| Bookmarks | `nx_list_bookmarks`, `nx_get_bookmark`, `nx_create_bookmark`, `nx_update_bookmark`, `nx_delete_bookmark` |
-| Events | `nx_get_events`, `nx_get_event_manifest_events`, `nx_get_event_manifest_actions` |
-| Acknowledges | `nx_get_acknowledges`, `nx_acknowledge_event`, `nx_get_acknowledge` |
-| Triggers | `nx_get_triggers`, `nx_get_trigger`, `nx_fire_trigger` |
-| Rules | `nx_get_rules`, `nx_get_rule`, `nx_create_rule`, `nx_replace_rule`, `nx_modify_rule`, `nx_delete_rule`, `nx_reset_rules` |
-| Generic Events | `nx_create_generic_event` |
-| Analytics & Integrations | `nx_list_analytics_engines`, `nx_list_integrations`, `nx_get_integration`, `nx_delete_analytics_integration` |
-| Virtual Uploads | `nx_virtual_list_uploads`, `nx_virtual_start_upload`, `nx_virtual_get_upload_status`, `nx_virtual_cancel_upload` |
-| Logs & Audit | `nx_get_log_settings`, `nx_get_server_log`, `nx_get_audit_log` |
+| Systems | `nx_read_list_systems`, `nx_read_server_info`, `nx_read_list_servers` |
+| Cameras & Devices | `nx_read_list_cameras`, `nx_read_get_camera`, `nx_write_create_device`, `nx_update_replace_device`, `nx_update_modify_device`, `nx_delete_device`, `nx_read_get_device_status`, `nx_read_get_device_io`, `nx_update_set_device_io`, `nx_read_camera_snapshot`, `nx_read_camera_stream_url` |
+| Device Search | `nx_read_list_device_searches`, `nx_write_start_device_search`, `nx_read_get_device_search`, `nx_delete_stop_device_search`, `nx_read_get_device_types`, `nx_read_get_device_diagnosis`, `nx_read_get_all_devices_diagnosis` |
+| Recording | `nx_read_get_footage` |
+| PTZ | `nx_read_ptz_get_position`, `nx_write_ptz_set_position`, `nx_write_ptz_move`, `nx_delete_ptz_stop`, `nx_read_ptz_get_presets`, `nx_write_ptz_activate_preset` |
+| Storage | `nx_read_list_storages`, `nx_read_get_storage_status` |
+| Users | `nx_read_list_users` |
+| Bookmarks | `nx_read_list_bookmarks`, `nx_read_get_bookmark`, `nx_write_create_bookmark`, `nx_update_bookmark`, `nx_delete_bookmark` |
+| Events | `nx_read_get_events`, `nx_read_get_event_manifest_events`, `nx_read_get_event_manifest_actions` |
+| Acknowledges | `nx_read_get_acknowledges`, `nx_write_acknowledge_event`, `nx_read_get_acknowledge` |
+| Triggers | `nx_read_get_triggers`, `nx_read_get_trigger`, `nx_write_fire_trigger` |
+| Rules | `nx_read_get_rules`, `nx_read_get_rule`, `nx_write_create_rule`, `nx_update_replace_rule`, `nx_update_modify_rule`, `nx_delete_rule`, `nx_write_reset_rules` |
+| Generic Events | `nx_write_create_generic_event` |
+| Analytics & Integrations | `nx_read_list_analytics_engines`, `nx_read_list_integrations`, `nx_read_get_integration`, `nx_delete_analytics_integration` |
+| Virtual Uploads | `nx_read_virtual_list_uploads`, `nx_write_virtual_start_upload`, `nx_read_virtual_get_upload_status`, `nx_delete_virtual_cancel_upload` |
+| Logs & Audit | `nx_read_get_log_settings`, `nx_read_get_server_log`, `nx_read_get_audit_log` |
 
 ---
 
@@ -180,4 +181,4 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 - Fixed `SyntaxError: non-default argument follows default argument` on import — `system: SYS` is now the first parameter in all 18 affected tool functions.
 
 ### v2.0.0 (2026-04-01) — Breaking change
-- **`system` is now required** on all tools. Call `nx_list_systems` first to get available system names, then pass a system name to every subsequent tool call. This fixes a discoverability issue where Claude Desktop silently omitted the optional parameter and only queried the default system.
+- **`system` is now required** on all tools. Call `nx_read_list_systems` first to get available system names, then pass a system name to every subsequent tool call. This fixes a discoverability issue where Claude Desktop silently omitted the optional parameter and only queried the default system.

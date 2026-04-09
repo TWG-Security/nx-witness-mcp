@@ -11,6 +11,22 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.0.2] - 2026-04-08
+
+### Breaking Change
+- All 64 tool names have changed. Any saved prompts, scripts, or integrations referencing the old names must be updated.
+
+### Changed
+- Renamed all 64 MCP tools to include an explicit operation-category prefix that signals HTTP semantics at a glance: `read_` (39 GET/local-read tools), `write_` (12 POST tools), `update_` (5 PATCH/PUT tools renamed; `nx_update_bookmark` was already correct), `delete_` (3 DELETE tools renamed; the four tools already named `nx_delete_*` were unchanged).
+- Added `readOnlyHint` annotations to all tools via `@mcp.tool(annotations={"readOnlyHint": ...})`: `True` for all 39 read tools, `False` for all 25 write/update/delete tools.
+- Tools renamed with `read_` prefix (39): `nx_read_list_systems`, `nx_read_server_info`, `nx_read_list_cameras`, `nx_read_get_camera`, `nx_read_get_device_types`, `nx_read_list_device_searches`, `nx_read_get_device_search`, `nx_read_get_device_diagnosis`, `nx_read_get_all_devices_diagnosis`, `nx_read_camera_snapshot`, `nx_read_camera_stream_url`, `nx_read_get_events`, `nx_read_get_log_settings`, `nx_read_get_server_log`, `nx_read_get_audit_log`, `nx_read_get_event_manifest_events`, `nx_read_get_event_manifest_actions`, `nx_read_get_acknowledges`, `nx_read_get_acknowledge`, `nx_read_get_triggers`, `nx_read_get_trigger`, `nx_read_get_rules`, `nx_read_get_rule`, `nx_read_list_analytics_engines`, `nx_read_list_users`, `nx_read_list_servers`, `nx_read_list_storages`, `nx_read_get_storage_status`, `nx_read_list_bookmarks`, `nx_read_get_bookmark`, `nx_read_get_footage`, `nx_read_ptz_get_position`, `nx_read_ptz_get_presets`, `nx_read_virtual_list_uploads`, `nx_read_virtual_get_upload_status`, `nx_read_list_integrations`, `nx_read_get_integration`, `nx_read_get_device_io`, `nx_read_get_device_status`.
+- Tools renamed with `write_` prefix (12): `nx_write_create_device`, `nx_write_start_device_search`, `nx_write_acknowledge_event`, `nx_write_create_generic_event`, `nx_write_fire_trigger`, `nx_write_create_rule`, `nx_write_reset_rules`, `nx_write_create_bookmark`, `nx_write_ptz_set_position`, `nx_write_ptz_move`, `nx_write_ptz_activate_preset`, `nx_write_virtual_start_upload`.
+- Tools renamed with `update_` prefix (5): `nx_update_replace_device`, `nx_update_modify_device`, `nx_update_replace_rule`, `nx_update_modify_rule`, `nx_update_set_device_io`. (`nx_update_bookmark` unchanged — already correctly named.)
+- Tools renamed with `delete_` prefix (3): `nx_delete_stop_device_search`, `nx_delete_ptz_stop`, `nx_delete_virtual_cancel_upload`. (`nx_delete_device`, `nx_delete_rule`, `nx_delete_bookmark`, `nx_delete_analytics_integration` unchanged — already correctly named.)
+- Updated 8 cross-references in docstrings and `Field` descriptions to use the new tool names.
+
+---
+
 ## [2.0.1] - 2026-04-01
 
 ### Fixed
