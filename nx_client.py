@@ -11,7 +11,7 @@ class NXClient:
         self.username = username
         self.password = password
         self._token: str | None = None
-        self._client = httpx.AsyncClient(verify=False)
+        self._client = httpx.AsyncClient(verify=False, follow_redirects=True)
 
     async def _login(self) -> None:
         r = await self._client.post(
