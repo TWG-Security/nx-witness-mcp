@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.0.4] - 2026-05-15
+
+### Fixed
+- `NXClient` now pins `base_url` to the post-redirect origin after a successful login. v2.0.3 added `follow_redirects=True` which let the **login** request reach the regional NX Cloud relay node, but subsequent authenticated calls still hit the original `*.relay.vmsproxy.com` host, got 307'd to the regional node, and httpx stripped the `Authorization` header on the cross-origin redirect (RFC 7235 safety behavior). Result: every post-login request returned `401 Unauthorized`. After login succeeds, we now extract the final URL from the response and use that origin for all subsequent requests, so no further redirects occur.
+
+---
+
 ## [2.0.3] - 2026-05-15
 
 ### Fixed

@@ -14,12 +14,21 @@ class NXClient:
         self._client = httpx.AsyncClient(verify=False, follow_redirects=True)
 
     async def _login(self) -> None:
+        login_path = "/rest/v3/login/sessions"
         r = await self._client.post(
-            f"{self.base_url}/rest/v3/login/sessions",
+            f"{self.base_url}{login_path}",
             json={"username": self.username, "password": self.password},
         )
         r.raise_for_status()
         self._token = r.json()["token"]
+        # NX Cloud relay hosts (*.relay.vmsproxy.com) 307-redirect to a
+        # region-specific node (e.g. *.relay-us-nyc-2-prod-dp.vmsproxy.com).
+        # Pin base_url to the post-redirect origin so subsequent authenticated
+        # requests aren't redirected — httpx strips the Authorization header
+        # on cross-origin redirects (RFC 7235 safety), producing 401.
+        final = str(r.url)
+        if final.endswith(login_path):
+            self.base_url = final[: -len(login_path)]
 
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self._token}"}
