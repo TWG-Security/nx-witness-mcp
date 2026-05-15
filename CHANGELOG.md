@@ -11,6 +11,13 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.0.3] - 2026-05-15
+
+### Fixed
+- `NXClient` now follows HTTP redirects. NX Cloud relay hosts (`*.relay.vmsproxy.com`) issue `307 Temporary Redirect` responses to region-specific relay nodes (e.g. `relay-us-nyc-2-prod-dp.vmsproxy.com`) on `/rest/v3/login/sessions`. httpx defaults to **not** following redirects, so login failed for any system whose tenant was routed through a redirecting node, surfacing as `HTTPStatusError: Redirect response '307 Temporary Redirect'`. `httpx.AsyncClient` is now constructed with `follow_redirects=True`.
+
+---
+
 ## [2.0.2] - 2026-04-08
 
 ### Breaking Change
