@@ -1,0 +1,48 @@
+# .dockerignore — the "don't pack these" list for the build.
+#
+# Everything in this folder is normally sent to Docker as the "build context"
+# (the pile of ingredients Docker can copy from). Listing paths here keeps them
+# OUT of that pile, which makes builds faster, images smaller, and — most
+# importantly — keeps secrets and giant unused files from ever entering an image.
+
+# Version control & repo metadata
+.git
+.gitignore
+
+# Secrets / credentials — MUST never be baked into the image
+nx_systems.json
+.env
+.env.*
+
+# Config template (not needed at runtime; env vars supply config)
+nx_systems.example.json
+
+# Large reference-only API specs (~3.2 MB, never loaded at runtime)
+nx-meta-api-all.json
+nx-meta-api-v4.json
+
+# Python caches / build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Docs (not needed inside the running image)
+README.md
+CHANGELOG.md
+
+# Docker files themselves (no reason to copy them into the image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Tooling / OS noise
+.claude/
+.backup_*/
+.DS_Store
+Thumbs.db
