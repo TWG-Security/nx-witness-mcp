@@ -99,7 +99,69 @@ You can define as many systems as needed. `nx_systems.json` is excluded from ver
 python server.py
 ```
 
-The server communicates over stdio and is intended to be launched by a Claude Code host process, not run directly in a terminal.
+The server runs over **Streamable HTTP** (served by uvicorn). It binds to `MCP_HOST` (default `0.0.0.0`) and `MCP_PORT` (default `8000`) and exposes the MCP endpoint at `/mcp`. Override either with environment variables:
+
+```bash
+MCP_HOST=127.0.0.1 MCP_PORT=9000 python server.py
+```
+
+---
+
+## Running with Docker
+
+The repo ships a `Dockerfile`, `.dockerignore`, and `docker-compose.yml` for containerized deployment.
+
+### Build the image
+
+```bash
+docker build -t nx-witness-mcp .
+```
+
+### Run a container
+
+Credentials are supplied at runtime as environment variables — they are never baked into the image:
+
+```bash
+docker run -d --name nx-witness-mcp -p 8000:8000 \
+  -e NX_HOST="https://192.168.1.100:7001" \
+  -e NX_USER="admin" \
+  -e NX_PASS="your_password" \
+  nx-witness-mcp
+```
+
+The server is then reachable at `http://localhost:8000/mcp`.
+
+### Docker Compose (and Dockhand)
+
+```bash
+docker compose up -d
+```
+
+`docker-compose.yml` reads its `NX_*` values from the environment (or an optional, gitignored `.env` file). This stack can also be adopted and managed by **Dockhand**.
+
+### Supplying secrets with Infisical
+
+The image is intentionally **credential-agnostic** — it only reads `NX_HOST` / `NX_USER` / `NX_PASS` from the environment. Two ways to wire in Infisical:
+
+1. **Inject at deploy time (recommended):** keep the image generic and let Infisical place the `NX_*` variables into the container's environment — via the Infisical Kubernetes operator, an agent/sidecar, Dockhand's env settings, or by wrapping the launch:
+
+   ```bash
+   infisical run --env=prod -- docker compose up -d
+   ```
+
+2. **Bake the Infisical CLI into the image:** for a self-fetching container, the image can be extended to install the `infisical` CLI and change the start command to `infisical run -- python server.py`, passing a machine-identity `INFISICAL_TOKEN` plus project/environment IDs as env vars. (Not configured by default.)
+
+### Multi-system config in Docker
+
+For multiple NX Witness sites, bind-mount an `nx_systems.json` (which takes precedence over the `NX_*` env vars):
+
+```bash
+docker run -d -p 8000:8000 \
+  -v "$(pwd)/nx_systems.json:/app/nx_systems.json:ro" \
+  nx-witness-mcp
+```
+
+(Or uncomment the `volumes:` block in `docker-compose.yml`.)
 
 ---
 

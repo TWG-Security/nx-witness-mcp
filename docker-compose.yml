@@ -1,0 +1,45 @@
+# docker-compose.yml — declarative way to build and run the MCP server.
+#
+# Instead of typing a long `docker run ...` command, you describe the desired
+# state here and run `docker compose up -d`. Dockhand can also adopt and manage
+# this stack. Think of it as a saved, version-controlled "run configuration".
+
+services:
+  nx-witness-mcp:
+    # Build the image from the Dockerfile in this directory...
+    build: .
+    # ...and tag it with a friendly name so Dockhand / `docker images` show it.
+    image: nx-witness-mcp:latest
+    container_name: nx-witness-mcp
+
+    # Restart automatically unless you explicitly stop it (survives reboots /
+    # crashes, but won't fight a manual `docker compose down`).
+    restart: unless-stopped
+
+    # Map host port 8000 -> container port 8000 (host:container).
+    ports:
+      - "8000:8000"
+
+    # Secrets come from the environment at runtime — NOT hardcoded here.
+    #
+    # Option A (Infisical / Dockhand inject env): set NX_HOST/NX_USER/NX_PASS in
+    #   your secret manager and they flow into the container. The pass-through
+    #   syntax below (VAR: ${VAR}) forwards whatever is set in the shell/agent.
+    # Option B (local dev): create a gitignored .env file with the same keys;
+    #   env_file loads it. .env is already excluded by .gitignore/.dockerignore.
+    env_file:
+      - .env
+    environment:
+      # Pass-through placeholders. If a variable is unset, the container falls
+      # back to server.py's built-in defaults (admin/admin @ 127.0.0.1:7001).
+      NX_HOST: ${NX_HOST:-}
+      NX_USER: ${NX_USER:-}
+      NX_PASS: ${NX_PASS:-}
+      MCP_HOST: ${MCP_HOST:-0.0.0.0}
+      MCP_PORT: ${MCP_PORT:-8000}
+
+    # Optional: for MULTI-system setups, mount a credentials file read-only.
+    # nx_systems.json takes precedence over the NX_* env vars when present.
+    # Uncomment to use it:
+    # volumes:
+    #   - ./nx_systems.json:/app/nx_systems.json:ro
