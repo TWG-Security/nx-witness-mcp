@@ -155,7 +155,19 @@ The image is intentionally **credential-agnostic** — it only reads `NX_HOST` /
 
 ### Multi-system config in Docker
 
-For multiple NX Witness sites, bind-mount an `nx_systems.json` (which takes precedence over the `NX_*` env vars):
+For multiple NX Witness sites you have two options.
+
+**A. One env var (no file mount).** Set `NX_SYSTEMS` to a JSON object of all sites — see
+[Multiple systems via a single env var](#multiple-systems-via-a-single-env-var):
+
+```bash
+docker run -d -p 8000:8000 \
+  -e NX_SYSTEMS='{"systems":{"OfficeMain":{"host":"https://192.168.1.100:7001","user":"admin","pass":"..."},"Warehouse":{"host":"https://10.0.5.20:7001","user":"admin","pass":"..."}}}' \
+  nx-witness-mcp
+```
+
+**B. Bind-mount a file.** Mount an `nx_systems.json` (takes precedence over both `NX_SYSTEMS`
+and the `NX_*` vars):
 
 ```bash
 docker run -d -p 8000:8000 \
@@ -186,24 +198,45 @@ platform clones this repo, runs `docker build`, starts the image as an isolated 
 
 | Variable | Secret? | Purpose | Default |
 |----------|:-------:|---------|---------|
-| `NX_HOST` | no | NX Witness base URL, e.g. `https://192.168.1.100:7001` | `https://127.0.0.1:7001` |
-| `NX_USER` | no | NX Witness username | `admin` |
-| `NX_PASS` | **yes** | NX Witness password | `admin` |
+| `NX_SYSTEMS` | **yes** | **Multiple** NX sites as one JSON value (see [Multiple systems](#multiple-systems-via-a-single-env-var)). Overrides the `NX_*` vars below. | — |
+| `NX_HOST` | no | Single-system NX Witness base URL, e.g. `https://192.168.1.100:7001` | `https://127.0.0.1:7001` |
+| `NX_USER` | no | Single-system NX Witness username | `admin` |
+| `NX_PASS` | **yes** | Single-system NX Witness password | `admin` |
 | `MCP_HOST` | no | Bind address | `0.0.0.0` |
 | `PORT` | no | Listen port (injected by the platform) | `8000` |
 | `MCP_PORT` | no | Legacy listen-port fallback (used only if `PORT` is unset) | — |
 
-No secrets are baked into the image, the Dockerfile, or git history — `NX_PASS` is read from
-the environment at runtime, and `nx_systems.json` (multi-system credentials) is git- and
-docker-ignored. For **multiple** NX sites, mount an `nx_systems.json` (see below); it takes
-precedence over the `NX_*` env vars.
+No secrets are baked into the image, the Dockerfile, or git history — credentials are read
+from the environment at runtime, and `nx_systems.json` (multi-system credentials) is git- and
+docker-ignored. Use `NX_HOST`/`NX_USER`/`NX_PASS` for a single site, or `NX_SYSTEMS` for
+several (below).
+
+### Multiple systems via a single env var
+
+When you can't mount a file (env-var-only deployments), set **`NX_SYSTEMS`** to a JSON object
+containing every site. Mark it secret — it holds passwords. It takes precedence over the
+single-system `NX_*` vars.
+
+```json
+{"systems":{"OfficeMain":{"host":"https://192.168.1.100:7001","user":"admin","pass":"..."},"Warehouse":{"host":"https://10.0.5.20:7001","user":"admin","pass":"..."}}}
+```
+
+- Each JSON key (`OfficeMain`, `Warehouse`) is a system name — exactly what you pass as the
+  `system` argument to every tool, and what `nx_read_list_systems` returns. The first key is
+  the default.
+- To add or remove a site, edit this one value — no new variable is needed.
+
+This is the same schema as `nx_systems.json`, just delivered as one environment variable
+instead of a mounted file. Resolution order is: `nx_systems.json` file → `NX_SYSTEMS` →
+`NX_HOST`/`NX_USER`/`NX_PASS`.
 
 ### Operator steps
 
-MCP Servers → **Add MCP server** → **Docker build** → paste this repo's git URL → set
-**Endpoint path** to `/mcp` → add `NX_HOST` / `NX_USER` / `NX_PASS` (mark `NX_PASS` secret;
-add a `GIT_TOKEN` secret too if the repo is private) → **Add server**. When it reports
-`running`, attach it to a gateway (Gateways → **Edit servers**).
+Register the server from this repo's git URL, set the **Endpoint path** to `/mcp`, then add
+the environment variables above — `NX_HOST`/`NX_USER`/`NX_PASS` (mark `NX_PASS` secret) for a
+single site, or `NX_SYSTEMS` (secret) for several. Add any credential your deployment
+platform requires to clone a private repository. Once the server is running, attach it to a
+gateway.
 
 ### Governance annotations
 

@@ -14,6 +14,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [2.1.0] - 2026-07-13
 
 ### Added
+- **`NX_SYSTEMS` environment variable** for configuring multiple NX Witness sites without mounting a file. Set it to the same `{"systems": {...}}` JSON that `nx_systems.json` uses, delivered as one (secret) env var. Config resolution order is now: `nx_systems.json` file → `NX_SYSTEMS` env var → single-system `NX_HOST`/`NX_USER`/`NX_PASS`. Invalid JSON raises a clear error at startup.
 - `GET /healthz` liveness endpoint (returns `200 ok`), exempted from the MCP transport middleware.
 - Structured per-tool-call logging: one JSON line to stdout with `ts`, `level`, `tool`, `status`, `duration_ms` (tool arguments are never logged, to avoid leaking credentials).
 - `destructiveHint: true` annotation on all 25 mutating tools so the TWG MCP Control Plane gateway hides them from read-only groups. Read-only tools keep `readOnlyHint: true`.
