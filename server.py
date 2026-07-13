@@ -2,12 +2,17 @@
 """MCP server for NX Witness VMS — multi-system support."""
 
 import os
+import sys
+import time
+from datetime import datetime, timezone
 from typing import Annotated, Optional
 
 import httpx
 from fastmcp import FastMCP
+from fastmcp.server.middleware import Middleware
 from fastmcp.utilities.types import Image
 from pydantic import Field
+from starlette.responses import PlainTextResponse
 
 from nx_client import NXClient
 
@@ -53,6 +58,50 @@ DEFAULT_SYSTEM: str = next(iter(SYSTEMS))   # first key is the default
 _clients: dict[str, NXClient] = {}
 
 mcp = FastMCP("nx-witness")
+
+
+# ---------------------------------------------------------------------------
+# Observability
+# ---------------------------------------------------------------------------
+class ToolCallLogMiddleware(Middleware):
+    """Emit one structured JSON line per tool call to stdout.
+
+    Fields: ts, level, tool, status, duration_ms. Tool *arguments* are
+    deliberately never logged — they may carry device/site credentials.
+    """
+
+    async def on_call_tool(self, context, call_next):
+        tool = getattr(context.message, "name", "unknown")
+        start = time.monotonic()
+        status = "ok"
+        try:
+            return await call_next(context)
+        except Exception:
+            status = "error"
+            raise
+        finally:
+            print(
+                json.dumps(
+                    {
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "level": "info" if status == "ok" else "error",
+                        "tool": tool,
+                        "status": status,
+                        "duration_ms": round((time.monotonic() - start) * 1000, 1),
+                    }
+                ),
+                file=sys.stdout,
+                flush=True,
+            )
+
+
+mcp.add_middleware(ToolCallLogMiddleware())
+
+
+@mcp.custom_route("/healthz", methods=["GET"])
+async def healthz(request):
+    """Liveness/readiness probe for the control plane. 200 once serving."""
+    return PlainTextResponse("ok", status_code=200)
 
 
 def get_client(system: str | None = None) -> NXClient:
@@ -145,7 +194,7 @@ async def nx_read_get_camera(
         raise
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_create_device(
     system: SYS,
     physical_id: Annotated[str, Field(description="Device hardware identifier, e.g. '92-61-00-00-00-9F'")],
@@ -178,7 +227,7 @@ async def nx_write_create_device(
     )
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_update_replace_device(
     device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
     device: Annotated[dict, Field(description="Full device object. Required fields: physicalId, url, typeId. All other fields will be replaced.")],
@@ -188,7 +237,7 @@ async def nx_update_replace_device(
     return await get_client(system).replace_device(device_id, device)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_update_modify_device(
     device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
     changes: Annotated[dict, Field(description="Fields to update. Any subset of: name, url, typeId, mac, serverId, vendor, model, group, credentials, logicalId, isManuallyAdded, options, schedule, motion, parameters")],
@@ -198,7 +247,7 @@ async def nx_update_modify_device(
     return await get_client(system).modify_device(device_id, changes)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_delete_device(
     device_id: Annotated[str, Field(description="Device UUID, physicalId, logicalId, or MAC address")],
     system: SYS,
@@ -213,7 +262,7 @@ async def nx_read_get_device_types(system: SYS) -> list:
     return await get_client(system).get_device_types()
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_start_device_search(
     system: SYS,
     target: Annotated[dict, Field(description='Search target. One of: {"ip": "192.168.1.1"} for single IP, {"startIp": "192.168.1.1", "endIp": "192.168.1.254"} for range, or {"url": "rtsp://..."} for URL')],
@@ -243,7 +292,7 @@ async def nx_read_get_device_search(
     return await get_client(system).get_device_search(search_id)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_delete_stop_device_search(
     search_id: Annotated[str, Field(description="Device search ID to stop and delete")],
     system: SYS,
@@ -395,7 +444,7 @@ async def nx_read_get_acknowledges(system: SYS) -> list:
     return await get_client(system).get_acknowledges()
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_acknowledge_event(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID from the event")],
@@ -429,7 +478,7 @@ async def nx_read_get_acknowledge(
 # Tools — Generic Events
 # ---------------------------------------------------------------------------
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_create_generic_event(
     system: SYS,
     source: Annotated[str, Field(description="Event source identifier string")],
@@ -467,7 +516,7 @@ async def nx_read_get_trigger(
     return await get_client(system).get_trigger(trigger_id)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_fire_trigger(
     system: SYS,
     trigger_id: Annotated[str, Field(description="Trigger UUID to fire")],
@@ -501,7 +550,7 @@ async def nx_read_get_rule(
     return await get_client(system).get_rule(rule_id)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_create_rule(
     rule: Annotated[dict, Field(description="Full rule definition object")],
     system: SYS,
@@ -510,7 +559,7 @@ async def nx_write_create_rule(
     return await get_client(system).create_rule(rule)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_update_replace_rule(
     rule_id: Annotated[str, Field(description="Rule UUID")],
     rule: Annotated[dict, Field(description="Full replacement rule object")],
@@ -520,7 +569,7 @@ async def nx_update_replace_rule(
     return await get_client(system).replace_rule(rule_id, rule)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_update_modify_rule(
     rule_id: Annotated[str, Field(description="Rule UUID")],
     changes: Annotated[dict, Field(description="Fields to update")],
@@ -530,7 +579,7 @@ async def nx_update_modify_rule(
     return await get_client(system).modify_rule(rule_id, changes)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_delete_rule(
     rule_id: Annotated[str, Field(description="Rule UUID to delete")],
     system: SYS,
@@ -539,7 +588,7 @@ async def nx_delete_rule(
     return await get_client(system).delete_rule(rule_id)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_reset_rules(system: SYS) -> dict:
     """Reset ALL event rules to factory defaults. This is destructive and cannot be undone."""
     return await get_client(system).reset_rules()
@@ -615,7 +664,7 @@ async def nx_read_list_bookmarks(
     )
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_create_bookmark(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID")],
@@ -646,7 +695,7 @@ async def nx_read_get_bookmark(
     return await get_client(system).get_bookmark(device_id, bookmark_id)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_update_bookmark(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID")],
@@ -669,7 +718,7 @@ async def nx_update_bookmark(
     )
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_delete_bookmark(
     bookmark_id: Annotated[str, Field(description="Bookmark UUID")],
     system: SYS,
@@ -714,7 +763,7 @@ async def nx_read_ptz_get_position(
     return await get_client(system).ptz_get_position(device_id)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_ptz_set_position(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
@@ -733,7 +782,7 @@ async def nx_write_ptz_set_position(
     )
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_ptz_move(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
@@ -752,7 +801,7 @@ async def nx_write_ptz_move(
     )
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_delete_ptz_stop(
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
     system: SYS,
@@ -770,7 +819,7 @@ async def nx_read_ptz_get_presets(
     return await get_client(system).ptz_get_presets(device_id)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_ptz_activate_preset(
     system: SYS,
     device_id: Annotated[str, Field(description="Device UUID of the PTZ camera")],
@@ -798,7 +847,7 @@ async def nx_read_virtual_list_uploads(
     return await get_client(system).virtual_list_uploads(device_id)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_write_virtual_start_upload(
     device_id: Annotated[str, Field(description="Virtual device UUID")],
     files: Annotated[list[dict], Field(description="List of file metadata objects. Each item: startTimeMs, durationMs, sizeB, md5, container, codec.")],
@@ -818,7 +867,7 @@ async def nx_read_virtual_get_upload_status(
     return await get_client(system).virtual_get_upload_status(device_id, upload_id)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_delete_virtual_cancel_upload(
     device_id: Annotated[str, Field(description="Virtual device UUID")],
     upload_id: Annotated[str, Field(description="Upload session UUID")],
@@ -847,7 +896,7 @@ async def nx_read_get_integration(
     return await get_client(system).get_integration(integration_id)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_delete_analytics_integration(
     integration_id: Annotated[str, Field(description="Integration UUID to remove")],
     system: SYS,
@@ -869,7 +918,7 @@ async def nx_read_get_device_io(
     return await get_client(system).get_device_io(device_id)
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
 async def nx_update_set_device_io(
     device_id: Annotated[str, Field(description="Device UUID")],
     ports: Annotated[dict, Field(description='Map of port number to port state. Example: {"1": {"isActive": true}}')],
@@ -896,8 +945,10 @@ if __name__ == "__main__":
     import uvicorn
     from middleware import MCPTransportMiddleware
 
+    # The TWG control plane injects PORT at runtime; honor it first. MCP_PORT is
+    # kept as a fallback for existing standalone/compose deployments.
     host = os.environ.get("MCP_HOST", "0.0.0.0")
-    port = int(os.environ.get("MCP_PORT", "8000"))
+    port = int(os.environ.get("PORT") or os.environ.get("MCP_PORT") or "8000")
 
     inner = mcp.http_app()
     app = MCPTransportMiddleware(inner)

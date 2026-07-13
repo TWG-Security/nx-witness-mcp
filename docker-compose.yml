@@ -36,7 +36,8 @@ services:
       NX_USER: ${NX_USER:-}
       NX_PASS: ${NX_PASS:-}
       MCP_HOST: ${MCP_HOST:-0.0.0.0}
-      MCP_PORT: ${MCP_PORT:-8000}
+      # PORT is what server.py binds (also what the TWG control plane injects).
+      PORT: ${PORT:-8000}
 
     # Optional: for MULTI-system setups, mount a credentials file read-only.
     # nx_systems.json takes precedence over the NX_* env vars when present.

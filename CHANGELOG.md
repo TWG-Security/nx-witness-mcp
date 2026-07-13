@@ -11,6 +11,19 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.1.0] - 2026-07-13
+
+### Added
+- `GET /healthz` liveness endpoint (returns `200 ok`), exempted from the MCP transport middleware.
+- Structured per-tool-call logging: one JSON line to stdout with `ts`, `level`, `tool`, `status`, `duration_ms` (tool arguments are never logged, to avoid leaking credentials).
+- `destructiveHint: true` annotation on all 25 mutating tools so the TWG MCP Control Plane gateway hides them from read-only groups. Read-only tools keep `readOnlyHint: true`.
+- Migration note in the README for deploying via the TWG MCP Control Plane **Docker build** path (transport, `/mcp` endpoint path, env-var table with secrets marked).
+
+### Changed
+- The server now reads the **`PORT`** env var first (the control plane injects it at runtime), falling back to `MCP_PORT`, then `8000`. Binding stays on `0.0.0.0`. The Dockerfile and `docker-compose.yml` were updated to the `PORT` convention; the healthcheck honors `PORT` too. No tools were added or removed (still 64).
+
+---
+
 ## [2.0.4] - 2026-05-15
 
 ### Fixed
