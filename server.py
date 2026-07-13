@@ -35,7 +35,15 @@ _CONFIG_FILE = os.path.join(os.path.dirname(__file__), "nx_systems.json")
 
 
 def _load_systems() -> dict[str, dict]:
-    """Load system configs from nx_systems.json, falling back to env vars."""
+    """Load system configs, in priority order:
+
+    1. nx_systems.json file (multi-system; for bind-mounted deployments).
+    2. NX_SYSTEMS env var — the same {"systems": {...}} JSON as a single value
+       (multi-system; for platforms that inject configuration as env vars and
+       cannot mount files).
+    3. NX_HOST / NX_USER / NX_PASS discrete env vars (single system).
+    """
+    # 1. Config file (if mounted)
     if os.path.exists(_CONFIG_FILE):
         with open(_CONFIG_FILE) as f:
             data = json.load(f)
@@ -43,7 +51,20 @@ def _load_systems() -> dict[str, dict]:
         if systems:
             return systems
 
-    # Fallback: single system from environment variables
+    # 2. NX_SYSTEMS env var holding the whole {"systems": {...}} object
+    raw = os.environ.get("NX_SYSTEMS")
+    if raw:
+        try:
+            systems = json.loads(raw).get("systems", {})
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"NX_SYSTEMS is not valid JSON: {e}. Expected "
+                '{"systems": {"Name": {"host": "...", "user": "...", "pass": "..."}}}'
+            ) from e
+        if systems:
+            return systems
+
+    # 3. Fallback: single system from discrete environment variables
     return {
         "default": {
             "host": os.environ.get("NX_HOST", "https://127.0.0.1:7001"),
