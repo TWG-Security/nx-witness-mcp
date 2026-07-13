@@ -99,11 +99,13 @@ You can define as many systems as needed. `nx_systems.json` is excluded from ver
 python server.py
 ```
 
-The server runs over **Streamable HTTP** (served by uvicorn). It binds to `MCP_HOST` (default `0.0.0.0`) and `MCP_PORT` (default `8000`) and exposes the MCP endpoint at `/mcp`. Override either with environment variables:
+The server runs over **Streamable HTTP** (served by uvicorn). It binds to `MCP_HOST` (default `0.0.0.0`) and the port from **`PORT`** (falling back to `MCP_PORT`, then `8000`) and exposes the MCP endpoint at `/mcp`. A plain `GET /healthz` returns `200 ok` for liveness probes. Override host/port with environment variables:
 
 ```bash
-MCP_HOST=127.0.0.1 MCP_PORT=9000 python server.py
+MCP_HOST=127.0.0.1 PORT=9000 python server.py
 ```
+
+`PORT` takes precedence so the server drops straight into platforms (like the TWG MCP Control Plane) that inject a `PORT` at runtime; `MCP_PORT` is still honored for existing deployments.
 
 ---
 
@@ -162,6 +164,53 @@ docker run -d -p 8000:8000 \
 ```
 
 (Or uncomment the `volumes:` block in `docker-compose.yml`.)
+
+---
+
+## Deploying on the TWG MCP Control Plane (migration note)
+
+This server is ready for the control plane's **Docker build (build-from-git)** path. The
+platform clones this repo, runs `docker build`, starts the image as an isolated container
+(`--restart unless-stopped`), injects `PORT` plus the env vars below at runtime, and puts a
+**gateway** in front of it — LLM clients never reach the container directly.
+
+| Item | Value |
+|------|-------|
+| **Transport** | Streamable HTTP (JSON-RPC 2.0 over HTTP) |
+| **Endpoint path** | `/mcp` — set this as the server's **Endpoint path** in the control plane |
+| **Listen address** | `0.0.0.0` on the injected `PORT` (fallback `MCP_PORT`, then `8000`) |
+| **Health check** | `GET /healthz` → `200 ok` (platform also falls back to an MCP `initialize` probe) |
+| **Deploy path** | **Docker build** (it already speaks HTTP — the Command/stdio path is *not* needed) |
+
+### Environment variables
+
+| Variable | Secret? | Purpose | Default |
+|----------|:-------:|---------|---------|
+| `NX_HOST` | no | NX Witness base URL, e.g. `https://192.168.1.100:7001` | `https://127.0.0.1:7001` |
+| `NX_USER` | no | NX Witness username | `admin` |
+| `NX_PASS` | **yes** | NX Witness password | `admin` |
+| `MCP_HOST` | no | Bind address | `0.0.0.0` |
+| `PORT` | no | Listen port (injected by the platform) | `8000` |
+| `MCP_PORT` | no | Legacy listen-port fallback (used only if `PORT` is unset) | — |
+
+No secrets are baked into the image, the Dockerfile, or git history — `NX_PASS` is read from
+the environment at runtime, and `nx_systems.json` (multi-system credentials) is git- and
+docker-ignored. For **multiple** NX sites, mount an `nx_systems.json` (see below); it takes
+precedence over the `NX_*` env vars.
+
+### Operator steps
+
+MCP Servers → **Add MCP server** → **Docker build** → paste this repo's git URL → set
+**Endpoint path** to `/mcp` → add `NX_HOST` / `NX_USER` / `NX_PASS` (mark `NX_PASS` secret;
+add a `GIT_TOKEN` secret too if the repo is private) → **Add server**. When it reports
+`running`, attach it to a gateway (Gateways → **Edit servers**).
+
+### Governance annotations
+
+`tools/list` advertises `readOnlyHint: true` on the 39 read-only tools and
+`readOnlyHint: false` + `destructiveHint: true` on the 25 mutating tools, so the gateway
+hides mutating tools from read-only groups. The full tool set (64 tools) is unchanged by
+this deployment adaptation.
 
 ---
 

@@ -25,6 +25,13 @@ class MCPTransportMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Health probe (and any non-MCP custom route) must bypass the MCP
+        # transport shims below — notably the GET "No sessionId" short-circuit,
+        # which would otherwise 400 a plain GET /healthz.
+        if scope.get("path") == "/healthz":
+            await self.app(scope, receive, send)
+            return
+
         # CORS preflight — must return 204 before FastMCP sees the request
         if scope["method"] == "OPTIONS":
             await send({"type": "http.response.start", "status": 204, "headers": []})
