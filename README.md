@@ -155,14 +155,17 @@ The image is intentionally **credential-agnostic** — it only reads `NX_HOST` /
 
 ### Multi-system config in Docker
 
-For multiple NX Witness sites you have two options.
+For multiple NX Witness sites you have three options — the two env-var forms from
+[Multiple systems](#multiple-systems) (per-site `NX_SYSTEM_*` vars or a single `NX_SYSTEMS`
+JSON value), or a bind-mounted file.
 
-**A. One env var (no file mount).** Set `NX_SYSTEMS` to a JSON object of all sites — see
-[Multiple systems via a single env var](#multiple-systems-via-a-single-env-var):
+**A. Env vars (no file mount).** Pass per-site `NX_SYSTEM_*` vars, or one `NX_SYSTEMS` JSON
+value:
 
 ```bash
 docker run -d -p 8000:8000 \
-  -e NX_SYSTEMS='{"systems":{"OfficeMain":{"host":"https://192.168.1.100:7001","user":"admin","pass":"..."},"Warehouse":{"host":"https://10.0.5.20:7001","user":"admin","pass":"..."}}}' \
+  -e NX_SYSTEM_OfficeMain_HOST=https://192.168.1.100:7001 -e NX_SYSTEM_OfficeMain_USER=admin -e NX_SYSTEM_OfficeMain_PASS=... \
+  -e NX_SYSTEM_Warehouse_HOST=https://10.0.5.20:7001 -e NX_SYSTEM_Warehouse_USER=admin -e NX_SYSTEM_Warehouse_PASS=... \
   nx-witness-mcp
 ```
 
@@ -198,7 +201,8 @@ platform clones this repo, runs `docker build`, starts the image as an isolated 
 
 | Variable | Secret? | Purpose | Default |
 |----------|:-------:|---------|---------|
-| `NX_SYSTEMS` | **yes** | **Multiple** NX sites as one JSON value (see [Multiple systems](#multiple-systems-via-a-single-env-var)). Overrides the `NX_*` vars below. | — |
+| `NX_SYSTEM_<NAME>_HOST` / `_USER` / `_PASS` | `_PASS` **yes** | **Multiple** NX sites, one set of vars per site (see [Multiple systems](#multiple-systems)). `<NAME>` becomes the system name. | — |
+| `NX_SYSTEMS` | **yes** | **Multiple** NX sites as one JSON value (alternative to the flat vars above; see [Multiple systems](#multiple-systems)). | — |
 | `NX_HOST` | no | Single-system NX Witness base URL, e.g. `https://192.168.1.100:7001` | `https://127.0.0.1:7001` |
 | `NX_USER` | no | Single-system NX Witness username | `admin` |
 | `NX_PASS` | **yes** | Single-system NX Witness password | `admin` |
@@ -208,35 +212,52 @@ platform clones this repo, runs `docker build`, starts the image as an isolated 
 
 No secrets are baked into the image, the Dockerfile, or git history — credentials are read
 from the environment at runtime, and `nx_systems.json` (multi-system credentials) is git- and
-docker-ignored. Use `NX_HOST`/`NX_USER`/`NX_PASS` for a single site, or `NX_SYSTEMS` for
-several (below).
+docker-ignored. Use `NX_HOST`/`NX_USER`/`NX_PASS` for a single site, or one of the two
+multi-system forms below for several.
 
-### Multiple systems via a single env var
+### Multiple systems
 
-When you can't mount a file (env-var-only deployments), set **`NX_SYSTEMS`** to a JSON object
-containing every site. Mark it secret — it holds passwords. It takes precedence over the
-single-system `NX_*` vars.
+Two env-var forms configure multiple NX sites (no file mount needed). Use whichever your
+platform makes easier — they produce identical results.
+
+**A. Per-site variables (flat).** Three variables per site, named
+`NX_SYSTEM_<NAME>_HOST` / `_USER` / `_PASS`. Mark the `_PASS` vars secret.
+
+```
+NX_SYSTEM_OfficeMain_HOST = https://192.168.1.100:7001
+NX_SYSTEM_OfficeMain_USER = admin
+NX_SYSTEM_OfficeMain_PASS = ...            (secret)
+NX_SYSTEM_Warehouse_HOST  = https://10.0.5.20:7001
+NX_SYSTEM_Warehouse_USER  = admin
+NX_SYSTEM_Warehouse_PASS  = ...            (secret)
+```
+
+- `<NAME>` (`OfficeMain`, `Warehouse`) is the system name — exactly what you pass as the
+  `system` argument to every tool, and what `nx_read_list_systems` returns. Names are
+  case-sensitive and may contain underscores (e.g. `NX_SYSTEM_Bethel_Church_HOST` →
+  `Bethel_Church`).
+- A site is included once it has a `_HOST`. Add a site by adding another `NX_SYSTEM_*` set.
+
+**B. One JSON variable.** Set **`NX_SYSTEMS`** (secret) to a JSON object of every site — the
+same schema as `nx_systems.json`:
 
 ```json
 {"systems":{"OfficeMain":{"host":"https://192.168.1.100:7001","user":"admin","pass":"..."},"Warehouse":{"host":"https://10.0.5.20:7001","user":"admin","pass":"..."}}}
 ```
 
-- Each JSON key (`OfficeMain`, `Warehouse`) is a system name — exactly what you pass as the
-  `system` argument to every tool, and what `nx_read_list_systems` returns. The first key is
-  the default.
-- To add or remove a site, edit this one value — no new variable is needed.
+Each JSON key is a system name; add or remove a site by editing this one value.
 
-This is the same schema as `nx_systems.json`, just delivered as one environment variable
-instead of a mounted file. Resolution order is: `nx_systems.json` file → `NX_SYSTEMS` →
-`NX_HOST`/`NX_USER`/`NX_PASS`.
+**Resolution order:** `nx_systems.json` file → `NX_SYSTEMS` JSON → `NX_SYSTEM_*` flat vars →
+single-system `NX_HOST`/`NX_USER`/`NX_PASS`. The first system found is the default (used only
+when a tool is somehow called without the required `system` argument).
 
 ### Operator steps
 
 Register the server from this repo's git URL, set the **Endpoint path** to `/mcp`, then add
-the environment variables above — `NX_HOST`/`NX_USER`/`NX_PASS` (mark `NX_PASS` secret) for a
-single site, or `NX_SYSTEMS` (secret) for several. Add any credential your deployment
-platform requires to clone a private repository. Once the server is running, attach it to a
-gateway.
+the environment variables above — `NX_HOST`/`NX_USER`/`NX_PASS` for a single site, or the
+`NX_SYSTEM_*` flat vars (or `NX_SYSTEMS`) for several; mark every password variable secret.
+Add any credential your deployment platform requires to clone a private repository. Once the
+server is running, attach it to a gateway.
 
 ### Governance annotations
 
@@ -320,6 +341,12 @@ MIT
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.
+
+### v2.2.0 (2026-07-14)
+- Added per-site env vars `NX_SYSTEM_<NAME>_HOST`/`_USER`/`_PASS` for multi-system config, and fixed multi-system deployments that used them being silently ignored (the server had no parser and fell back to the single-system default). See [Multiple systems](#multiple-systems).
+
+### v2.1.0 (2026-07-13)
+- Control-plane deployment: honor the injected `PORT`, add `GET /healthz`, per-tool JSON logging, `destructiveHint` annotations on mutating tools, and the `NX_SYSTEMS` JSON env var for multi-system config.
 
 ### v2.0.1 (2026-04-01)
 - Fixed `SyntaxError: non-default argument follows default argument` on import — `system: SYS` is now the first parameter in all 18 affected tool functions.
