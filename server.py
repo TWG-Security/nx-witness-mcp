@@ -34,6 +34,37 @@ import json
 _CONFIG_FILE = os.path.join(os.path.dirname(__file__), "nx_systems.json")
 
 
+def _load_flat_env_systems() -> dict[str, dict]:
+    """Parse per-site env vars of the form NX_SYSTEM_<NAME>_HOST / _USER / _PASS.
+
+    The <NAME> segment is preserved verbatim and becomes the system name — it
+    may itself contain underscores (e.g. NX_SYSTEM_Bethel_Church_HOST -> the
+    system named "Bethel_Church"). Iterating a sorted key list keeps the system
+    order — and therefore the default-system pick — deterministic regardless of
+    how the environment happens to be ordered. NX_SYSTEMS (plural, no trailing
+    underscore) is intentionally not matched here.
+    """
+    collected: dict[str, dict] = {}
+    for key in sorted(os.environ):
+        if not key.startswith("NX_SYSTEM_"):
+            continue
+        for suffix, field in (("_HOST", "host"), ("_USER", "user"), ("_PASS", "pass")):
+            if key.endswith(suffix):
+                name = key[len("NX_SYSTEM_"):-len(suffix)]
+                if name:
+                    collected.setdefault(name, {})[field] = os.environ[key]
+                break
+
+    # A site needs at least a host to be usable; missing user/pass default to
+    # "" so a misconfiguration surfaces as an auth error against the right host
+    # rather than the site being silently dropped.
+    return {
+        name: {"host": cfg["host"], "user": cfg.get("user", ""), "pass": cfg.get("pass", "")}
+        for name, cfg in collected.items()
+        if cfg.get("host")
+    }
+
+
 def _load_systems() -> dict[str, dict]:
     """Load system configs, in priority order:
 
@@ -41,7 +72,9 @@ def _load_systems() -> dict[str, dict]:
     2. NX_SYSTEMS env var — the same {"systems": {...}} JSON as a single value
        (multi-system; for platforms that inject configuration as env vars and
        cannot mount files).
-    3. NX_HOST / NX_USER / NX_PASS discrete env vars (single system).
+    3. NX_SYSTEM_<NAME>_HOST / _USER / _PASS flat env vars — one set per site
+       (multi-system; the flattest form for env-var-only platforms).
+    4. NX_HOST / NX_USER / NX_PASS discrete env vars (single system).
     """
     # 1. Config file (if mounted)
     if os.path.exists(_CONFIG_FILE):
@@ -64,7 +97,12 @@ def _load_systems() -> dict[str, dict]:
         if systems:
             return systems
 
-    # 3. Fallback: single system from discrete environment variables
+    # 3. Flat per-site env vars: NX_SYSTEM_<NAME>_HOST / _USER / _PASS
+    flat = _load_flat_env_systems()
+    if flat:
+        return flat
+
+    # 4. Fallback: single system from discrete environment variables
     return {
         "default": {
             "host": os.environ.get("NX_HOST", "https://127.0.0.1:7001"),

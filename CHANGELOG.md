@@ -11,6 +11,16 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.2.0] - 2026-07-14
+
+### Added
+- **Per-site environment variables** for multi-system config: `NX_SYSTEM_<NAME>_HOST`, `NX_SYSTEM_<NAME>_USER`, and `NX_SYSTEM_<NAME>_PASS`. `<NAME>` becomes the system name (case-sensitive; may contain underscores, e.g. `NX_SYSTEM_Bethel_Church_HOST` → `Bethel_Church`). This is the flattest form for platforms that inject configuration as individual env vars, complementing the `NX_SYSTEMS` JSON value added in 2.1.0.
+
+### Fixed
+- Multi-system deployments that supplied `NX_SYSTEM_<NAME>_*` variables were silently ignored — the server had no parser for them and fell back to the single-system `admin/admin @ 127.0.0.1` default, so no configured site was reachable. `_load_systems()` now parses these variables. Full resolution order: `nx_systems.json` file → `NX_SYSTEMS` JSON → `NX_SYSTEM_*` flat vars → single-system `NX_HOST`/`NX_USER`/`NX_PASS`. A site is included once it declares a `_HOST`; the tool set is unchanged (64 tools).
+
+---
+
 ## [2.1.0] - 2026-07-13
 
 ### Added
