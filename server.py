@@ -917,12 +917,12 @@ async def nx_write_virtual_start_upload(
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
-async def nx_read_virtual_get_upload_status(
+async def nx_read_virtual_get_transfer_status(
     device_id: Annotated[str, Field(description="Virtual device UUID")],
     upload_id: Annotated[str, Field(description="Upload session UUID")],
     system: SYS,
 ) -> dict:
-    """Get status of an in-progress virtual camera upload, including uploadProgressPercent and archiveProgressPercent."""
+    """Get status of an in-progress virtual camera upload, including uploadProgressPercent and archiveProgressPercent. Read-only (HTTP GET); formerly nx_read_virtual_get_upload_status."""
     return await get_client(system).virtual_get_upload_status(device_id, upload_id)
 
 
