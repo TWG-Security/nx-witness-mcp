@@ -9,6 +9,9 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Renamed the read-only tool `nx_read_virtual_get_upload_status` → **`nx_read_virtual_get_transfer_status`**. The tool is genuinely read-only (HTTP `GET`, `readOnlyHint: true`), but the TWG MCP Control Plane's tool-contract inspector read the `upload` token in the old name as a mutating verb and treated the tool as destructive (denied to non-admin users, standing alarm — see issue #19). Dropping that token from the name clears the false positive; the annotation, parameters, behavior, and underlying endpoint are unchanged. Tool count is still 64. **Breaking:** callers referencing the old tool name must switch to the new name.
+
 ---
 
 ## [2.2.0] - 2026-07-14

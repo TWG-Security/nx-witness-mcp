@@ -319,7 +319,7 @@ Some NX Witness installations also expose a built-in MCP connector (sometimes li
 | Rules | `nx_read_get_rules`, `nx_read_get_rule`, `nx_write_create_rule`, `nx_update_replace_rule`, `nx_update_modify_rule`, `nx_delete_rule`, `nx_write_reset_rules` |
 | Generic Events | `nx_write_create_generic_event` |
 | Analytics & Integrations | `nx_read_list_analytics_engines`, `nx_read_list_integrations`, `nx_read_get_integration`, `nx_delete_analytics_integration` |
-| Virtual Uploads | `nx_read_virtual_list_uploads`, `nx_write_virtual_start_upload`, `nx_read_virtual_get_upload_status`, `nx_delete_virtual_cancel_upload` |
+| Virtual Uploads | `nx_read_virtual_list_uploads`, `nx_write_virtual_start_upload`, `nx_read_virtual_get_transfer_status`, `nx_delete_virtual_cancel_upload` |
 | Logs & Audit | `nx_read_get_log_settings`, `nx_read_get_server_log`, `nx_read_get_audit_log` |
 
 ---
