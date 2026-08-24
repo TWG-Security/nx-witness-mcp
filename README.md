@@ -15,6 +15,7 @@ NX Witness MCP exposes your NX Witness system as a set of Claude tools, allowing
 - Create and manage bookmarks, rules, and triggers
 - Monitor system health, metrics, and alarms
 - Manage integrations and analytics engines
+- Check which Nx software build a site is running and push build upgrades to it
 - And much more — the full NX Witness REST API surface
 
 Multi-system support lets you connect to multiple NX Witness sites simultaneously. Every tool requires a `system` parameter — call `nx_read_list_systems` first to discover available system names, then pass one to each subsequent tool call.
@@ -321,6 +322,35 @@ Some NX Witness installations also expose a built-in MCP connector (sometimes li
 | Analytics & Integrations | `nx_read_list_analytics_engines`, `nx_read_list_integrations`, `nx_read_get_integration`, `nx_delete_analytics_integration` |
 | Virtual Uploads | `nx_read_virtual_list_uploads`, `nx_write_virtual_start_upload`, `nx_read_virtual_get_transfer_status`, `nx_delete_virtual_cancel_upload` |
 | Logs & Audit | `nx_read_get_log_settings`, `nx_read_get_server_log`, `nx_read_get_audit_log` |
+| Software Updates | `nx_read_get_build_info`, `nx_read_get_build_status`, `nx_read_get_build_storage_servers`, `nx_write_start_build_download`, `nx_write_install_build`, `nx_write_finish_build_update`, `nx_write_retry_build_update`, `nx_delete_cancel_build_update` |
+
+### Software Updates
+
+These tools drive the same upgrade flow as Nx Desktop's **Updates** tab, per site:
+
+1. `nx_read_get_build_info` with `info_category="installed"` — which build the site runs today.
+2. `nx_read_get_build_info` with `info_category="latest"` — what it could upgrade to.
+3. `nx_write_start_build_download` — downloads the build to every server in the site. It resolves
+   the update manifest automatically; pass `version` to pin a specific build, or `manifest` to
+   supply one from step 2 verbatim.
+4. `nx_read_get_build_status` — poll until every server reports `readyToInstall`.
+5. `nx_write_install_build` — install on explicit server UUIDs (from `nx_read_list_servers`).
+   There is no install-everywhere default. **Each server restarts its media server service,
+   so recording and live view drop briefly.**
+6. `nx_write_finish_build_update` — close out the upgrade.
+
+`nx_write_retry_build_update` retries a step that failed (e.g. `noFreeSpaceToDownload`), and
+`nx_delete_cancel_build_update` aborts an in-progress update, clearing the manifest and stopping
+downloads — it does not roll back servers that already installed.
+
+Notes:
+
+- This is the **v4 `Update` API family — Nx 6.x and newer**. Older servers return 404.
+- Everything except `nx_read_get_build_info` and `nx_read_get_build_status` requires a
+  **Power User** on the site; a 403 means the MCP credential is under-privileged.
+- The tools are named around `build` rather than `update` on purpose: the TWG MCP Control Plane's
+  tool-contract inspector reads a mutating verb in a read-only tool's *name* as evidence it
+  mutates (see the `nx_read_virtual_get_transfer_status` rename in the changelog).
 
 ---
 
