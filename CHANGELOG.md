@@ -9,8 +9,21 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Nx software build (update) tools — 8 new tools, taking the server from 64 to 72.** The v4 `Update` API family had no coverage, so the only build information available was the version string from `nx_read_server_info`, and upgrading a site meant a human in Nx Desktop's *Updates* tab. The new tools drive that flow per site over MCP:
+  - `nx_read_get_build_info` — update manifest for a build (`info_category`: `installed` | `latest` | `target` | `specific`, plus `version`, `publication_type`, `update_component`). `GET /rest/v4/update/info`.
+  - `nx_read_get_build_status` — site-wide state keyed by server id (`state`: `idle` | `starting` | `downloading` | `preparing` | `readyToInstall` | `latestUpdateInstalled` | `offline` | `error`, with `progress` and an error code such as `noFreeSpaceToDownload`). `GET /rest/v4/update`.
+  - `nx_read_get_build_storage_servers` — servers holding the downloaded update files. `GET /rest/v4/update/storage/{infoCategory}`.
+  - `nx_write_start_build_download` — downloads a build to the site. `POST /rest/v4/update/start` requires the full 14-field manifest, so the tool resolves it from `/update/info` itself (`latest`, or `specific` when `version` is given); `manifest` overrides that lookup.
+  - `nx_write_install_build` — installs on explicit server UUIDs. `peers` is **required**: there is no install-everywhere default, because each named server restarts its media server service. `POST /rest/v4/update/install`.
+  - `nx_write_finish_build_update` (`POST /rest/v4/update/finish`), `nx_write_retry_build_update` (`POST /rest/v4/update/retry`), and `nx_delete_cancel_build_update` (`DELETE /rest/v4/update`).
+
+  The five mutating tools carry `destructiveHint: true` so the control-plane gateway hides them from read-only groups; the three reads carry `readOnlyHint: true`. All of them require the `system` parameter like every other tool, and the whole family is **Nx 6.x and newer** — older servers return 404. Every tool except the two `nx_read_get_build_info`/`nx_read_get_build_status` reads needs a **Power User** credential on the site.
+
+  Tool names use the noun **`build`** rather than `update` deliberately: `update` is a mutating verb, and the control plane's tool-contract inspector reads such a token in a read-only tool's *name* as evidence the tool mutates — the same false positive that forced the `nx_read_virtual_get_upload_status` rename (issue #19). `POST /rest/v4/update/storage` (setting which servers hold update files) is intentionally not wrapped; it is rarely touched and adds mutating surface area for no operational gain.
+
 ### Changed
-- Renamed the read-only tool `nx_read_virtual_get_upload_status` → **`nx_read_virtual_get_transfer_status`**. The tool is genuinely read-only (HTTP `GET`, `readOnlyHint: true`), but the TWG MCP Control Plane's tool-contract inspector read the `upload` token in the old name as a mutating verb and treated the tool as destructive (denied to non-admin users, standing alarm — see issue #19). Dropping that token from the name clears the false positive; the annotation, parameters, behavior, and underlying endpoint are unchanged. Tool count is still 64. **Breaking:** callers referencing the old tool name must switch to the new name.
+- Renamed the read-only tool `nx_read_virtual_get_upload_status` → **`nx_read_virtual_get_transfer_status`**. The tool is genuinely read-only (HTTP `GET`, `readOnlyHint: true`), but the TWG MCP Control Plane's tool-contract inspector read the `upload` token in the old name as a mutating verb and treated the tool as destructive (denied to non-admin users, standing alarm — see issue #19). Dropping that token from the name clears the false positive; the annotation, parameters, behavior, and underlying endpoint are unchanged. The rename itself did not change the tool count. **Breaking:** callers referencing the old tool name must switch to the new name.
 
 ---
 

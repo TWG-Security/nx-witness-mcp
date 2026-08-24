@@ -600,5 +600,54 @@ class NXClient:
         entries.sort(key=lambda e: e.get("createdTimeSec", 0), reverse=True)
         return entries[:limit]
 
+    # -------------------------------------------------------------------------
+    # Software Updates (v4 "Update" section; Nx 6.x and newer)
+    # -------------------------------------------------------------------------
+
+    async def get_update_info(
+        self,
+        info_category: str | None = None,
+        version: str | None = None,
+        publication_type: str | None = None,
+        update_component: str | None = None,
+    ) -> dict:
+        """Update manifest for a build. This is the body POST /update/start expects."""
+        params: dict[str, Any] = {}
+        if info_category:
+            params["infoCategory"] = info_category
+        if version:
+            params["version"] = version
+        if publication_type:
+            params["publicationType"] = publication_type
+        if update_component:
+            params["updateComponent"] = update_component
+        return await self._get("/rest/v4/update/info", params=params or None)
+
+    async def get_update_status(self) -> dict:
+        """Site-wide update state, keyed by server id."""
+        return await self._get("/rest/v4/update")
+
+    async def get_update_storage(self, info_category: str = "target") -> dict:
+        return await self._get(f"/rest/v4/update/storage/{info_category}")
+
+    async def start_update(self, manifest: dict) -> dict:
+        """Begin downloading a build. `manifest` comes from get_update_info()."""
+        return await self._post("/rest/v4/update/start", body=manifest)
+
+    async def install_update(self, peers: list[str]) -> Any:
+        return await self._post("/rest/v4/update/install", body={"peers": peers})
+
+    async def finish_update(self, ignore_pending_peers: bool | None = None) -> Any:
+        body: dict[str, Any] = {}
+        if ignore_pending_peers is not None:
+            body["ignorePendingPeers"] = ignore_pending_peers
+        return await self._post("/rest/v4/update/finish", body=body)
+
+    async def retry_update(self) -> dict:
+        return await self._post("/rest/v4/update/retry")
+
+    async def cancel_update(self) -> Any:
+        return await self._delete("/rest/v4/update")
+
     async def close(self) -> None:
         await self._client.aclose()

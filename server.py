@@ -997,6 +997,156 @@ async def nx_read_get_device_status(
 
 
 # ---------------------------------------------------------------------------
+# Tools — Software Updates (Nx build upgrades)
+# ---------------------------------------------------------------------------
+# Wraps the v4 "Update" API section (Nx 6.x and newer; older servers 404).
+# Tool names use "build" rather than "update" because the control plane's
+# tool-contract inspector reads a mutating verb in a read-only tool's name as
+# evidence the tool mutates — the same false positive that forced the
+# nx_read_virtual_get_upload_status rename (issue #19).
+#
+# Upgrade order: nx_write_start_build_download → poll nx_read_get_build_status
+# until every server reports readyToInstall → nx_write_install_build →
+# nx_write_finish_build_update. nx_write_retry_build_update retries a failed
+# step; nx_delete_cancel_build_update aborts and clears the manifest.
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_build_info(
+    system: SYS,
+    info_category: Annotated[
+        Optional[str],
+        Field(description="Which build to describe: 'installed' (running now), 'latest' "
+                          "(newest available), 'target' (queued for install), or 'specific' "
+                          "(pair with version). Omit for the server's current manifest."),
+    ] = None,
+    version: Annotated[
+        Optional[str],
+        Field(description="Build id, e.g. '6.0.3.40000'. The server fetches this manifest "
+                          "from the Nx updates server."),
+    ] = None,
+    publication_type: Annotated[
+        Optional[str],
+        Field(description="Release channel: local, private_build, private_patch, patch, beta, "
+                          "rc, or release."),
+    ] = None,
+    update_component: Annotated[
+        Optional[str],
+        Field(description="Component to describe: server, client, or customClient."),
+    ] = None,
+) -> dict:
+    """Get the Nx software update manifest for a build — version, release notes, EULA, and the
+    per-platform packages. Use info_category='installed' to report the build a site is running
+    and 'latest' to see what it could upgrade to. This manifest is also the input that
+    nx_write_start_build_download sends to the site."""
+    return await get_client(system).get_update_info(
+        info_category=info_category,
+        version=version,
+        publication_type=publication_type,
+        update_component=update_component,
+    )
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_build_status(system: SYS) -> dict:
+    """Get the site-wide software update state, keyed by server id. Each entry carries state
+    (idle, starting, downloading, preparing, readyToInstall, latestUpdateInstalled, offline,
+    error), progress, message, and — when state is error — an error code such as
+    noFreeSpaceToDownload, osVersionNotSupported, downloadFailed, or installationError."""
+    return await get_client(system).get_update_status()
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_build_storage_servers(
+    system: SYS,
+    info_category: Annotated[
+        str,
+        Field(description="Which build's storage to report: target, installed, latest, or specific."),
+    ] = "target",
+) -> dict:
+    """List the servers holding the downloaded update files for a build, and whether the site
+    picks them automatically. Requires Power User permissions."""
+    return await get_client(system).get_update_storage(info_category)
+
+
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
+async def nx_write_start_build_download(
+    system: SYS,
+    version: Annotated[
+        Optional[str],
+        Field(description="Build to download, e.g. '6.0.3.40000'. Omit to take the latest "
+                          "available build."),
+    ] = None,
+    publication_type: Annotated[
+        Optional[str],
+        Field(description="Release channel to resolve the build from: local, private_build, "
+                          "private_patch, patch, beta, rc, or release."),
+    ] = None,
+    manifest: Annotated[
+        Optional[dict],
+        Field(description="Full update manifest from nx_read_get_build_info. Supply only to "
+                          "override the automatic lookup."),
+    ] = None,
+) -> dict:
+    """Start downloading an Nx software build to every server in the site. This does NOT install
+    it — poll nx_read_get_build_status until the servers report readyToInstall, then call
+    nx_write_install_build. Requires Power User permissions."""
+    client = get_client(system)
+    if manifest is None:
+        manifest = await client.get_update_info(
+            info_category="specific" if version else "latest",
+            version=version,
+            publication_type=publication_type,
+        )
+    return await client.start_update(manifest)
+
+
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
+async def nx_write_install_build(
+    system: SYS,
+    peers: Annotated[
+        list[str],
+        Field(description="Server UUIDs to install on — get them from nx_read_list_servers. "
+                          "There is no install-everything default; list the servers explicitly."),
+    ],
+) -> dict:
+    """Install the downloaded Nx build on the named servers. Each server restarts its media
+    server service, so recording and live view drop briefly. Only call this once
+    nx_read_get_build_status reports readyToInstall for those servers. Requires Power User
+    permissions."""
+    return await get_client(system).install_update(peers)
+
+
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
+async def nx_write_finish_build_update(
+    system: SYS,
+    ignore_pending_peers: Annotated[
+        Optional[bool],
+        Field(description="Finish even though some servers have not installed the build yet, "
+                          "leaving the site on mixed versions."),
+    ] = None,
+) -> dict:
+    """Put the site into the 'Update Finished' state, closing out the upgrade. Call this after
+    nx_write_install_build has completed on every server. Requires Power User permissions."""
+    return await get_client(system).finish_update(ignore_pending_peers)
+
+
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
+async def nx_write_retry_build_update(system: SYS) -> dict:
+    """Retry the last failed update step — for example re-reserving space and restarting a
+    download on a server that failed with noFreeSpaceToDownload. Returns the refreshed
+    per-server status map. Requires Power User permissions."""
+    return await get_client(system).retry_update()
+
+
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True})
+async def nx_delete_cancel_build_update(system: SYS) -> dict:
+    """Cancel the update in progress: return the site to the idle state, clear the update
+    manifest, and stop all downloads. Already-installed servers are not rolled back. Requires
+    Power User permissions."""
+    return await get_client(system).cancel_update()
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
