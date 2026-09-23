@@ -1,7 +1,11 @@
 """NX Witness API client."""
 
+import re
 from typing import Any
 import httpx
+
+# Nx Cloud relay hosts embed the site's cloud id: https://{cloudId}.relay[-region].vmsproxy.com
+_RELAY_HOST = re.compile(r"^https?://([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.relay[\w-]*\.vmsproxy\.com", re.I)
 
 
 class NXClient:
@@ -628,10 +632,25 @@ class NXClient:
                 return list(seen.values()), True
             end_ms = min(int(t["startTimeMs"]) for t in page)
 
+    def relay_cloud_id(self) -> str | None:
+        """Cloud id parsed from a relay host URL, or None for LAN/Tailscale hosts."""
+        m = _RELAY_HOST.match(self.base_url)
+        return m.group(1).lower() if m else None
+
     async def get_site_info(self) -> dict:
-        """GET /rest/v4/site/info — cached; ids and cloud binding don't change at runtime."""
+        """GET /rest/v4/site/info — cached; ids and cloud binding don't change at runtime.
+
+        If the call fails (older server, restricted user) on a relay-configured site,
+        fall back to the cloud id embedded in the host so links still work.
+        """
         if self._site_info is None:
-            self._site_info = await self._get("/rest/v4/site/info")
+            try:
+                self._site_info = await self._get("/rest/v4/site/info")
+            except httpx.HTTPStatusError:
+                cloud_id = self.relay_cloud_id()
+                if not cloud_id:
+                    raise
+                self._site_info = {"cloudId": cloud_id, "cloudHost": "nxvms.com"}
         return self._site_info
 
     async def get_object_track(self, track_id: str) -> dict:
