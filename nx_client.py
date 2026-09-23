@@ -1,6 +1,5 @@
 """NX Witness API client."""
 
-import base64
 from typing import Any
 import httpx
 
@@ -107,8 +106,8 @@ class NXClient:
     async def get_device(self, device_id: str) -> dict:
         return await self._get(f"/rest/v4/devices/{device_id}")
 
-    async def get_camera_snapshot(self, device_id: str, width: int | None = None, height: int | None = None) -> str:
-        """Returns base64-encoded JPEG image."""
+    async def get_camera_snapshot(self, device_id: str, width: int | None = None, height: int | None = None) -> bytes:
+        """Returns raw JPEG bytes."""
         ticket_resp = await self._post("/rest/v4/login/tickets")
         ticket = ticket_resp.get("token") or ticket_resp.get("ticket") or ""
         if isinstance(ticket, dict):
@@ -118,8 +117,7 @@ class NXClient:
             params["width"] = width
         if height:
             params["height"] = height
-        img = await self._get_bytes(f"/rest/v4/devices/{device_id}/image", params=params)
-        return base64.b64encode(img).decode()
+        return await self._get_bytes(f"/rest/v4/devices/{device_id}/image", params=params)
 
     async def get_camera_stream_url(self, device_id: str) -> str:
         ticket_resp = await self._post("/rest/v4/login/tickets")
@@ -564,6 +562,54 @@ class NXClient:
 
     async def delete_analytics_integration(self, integration_id: str) -> Any:
         return await self._delete(f"/rest/v4/analytics/integrations/{integration_id}")
+
+    # -------------------------------------------------------------------------
+    # Analytics Object Search (object tracks in the Analytics DB)
+    # -------------------------------------------------------------------------
+
+    async def search_object_tracks(
+        self,
+        device_ids: list[str] | None = None,
+        object_type_ids: list[str] | None = None,
+        free_text: str | None = None,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        bounding_box: str | None = None,
+        analytics_engine_id: str | None = None,
+        limit: int | None = None,
+        sort_order: str | None = None,
+    ) -> list[dict]:
+        # List values are sent as repeated query params (deviceId=a&deviceId=b).
+        params: dict[str, Any] = {}
+        if device_ids:
+            params["deviceId"] = device_ids
+        if object_type_ids:
+            params["objectTypeId"] = object_type_ids
+        if free_text:
+            params["freeText"] = free_text
+        if start_time_ms is not None:
+            params["startTimeMs"] = start_time_ms
+        if end_time_ms is not None:
+            params["endTimeMs"] = end_time_ms
+        if bounding_box:
+            params["boundingBox"] = bounding_box
+        if analytics_engine_id:
+            params["analyticsEngineId"] = analytics_engine_id
+        if limit is not None:
+            params["limit"] = limit
+        if sort_order:
+            params["sortOrder"] = sort_order
+        return await self._get("/rest/v4/analytics/objectTracks", params=params or None)
+
+    async def get_object_track(self, track_id: str) -> dict:
+        return await self._get(f"/rest/v4/analytics/objectTracks/{track_id}")
+
+    async def get_object_track_best_shot(self, track_id: str, device_id: str) -> bytes:
+        """Returns the track's Best Shot as raw JPEG bytes (server converts to jpg)."""
+        return await self._get_bytes(
+            f"/rest/v4/analytics/objectTracks/{track_id}/bestShotImage.jpg",
+            params={"deviceId": device_id},
+        )
 
     # -------------------------------------------------------------------------
     # Server Logs

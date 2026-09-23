@@ -10,6 +10,12 @@ This project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Analytics object search — 3 new read-only tools, taking the server from 72 to 75.** Detected objects (people, vehicles, faces, plates) in the Analytics DB were unreachable over MCP; the only analytics surface was the engine list and `analyticsObject` rows in the event log. The new tools mirror Nx Desktop's *Objects* tab:
+  - `nx_read_search_objects` — `GET /rest/v4/analytics/objectTracks`, with `device_ids`, `object_type_ids`, `free_text`, `start_time_ms`/`end_time_ms`, `bounding_box`, `analytics_engine_id`, `limit` (default 50), and `sort_order` (default `desc`). Results add ISO `startTime`/`endTime` and omit the base64 `objectRegion` grid unless `include_region=true`.
+  - `nx_read_get_object_track` — `GET /rest/v4/analytics/objectTracks/{id}`.
+  - `nx_read_get_object_best_shot` — `GET /rest/v4/analytics/objectTracks/{id}/bestShotImage.jpg`, returned as a JPEG image.
+
+  All three carry `readOnlyHint: true`, require the `system` parameter, and need View Archive permission on the target cameras.
 - **Nx software build (update) tools — 8 new tools, taking the server from 64 to 72.** The v4 `Update` API family had no coverage, so the only build information available was the version string from `nx_read_server_info`, and upgrading a site meant a human in Nx Desktop's *Updates* tab. The new tools drive that flow per site over MCP:
   - `nx_read_get_build_info` — update manifest for a build (`info_category`: `installed` | `latest` | `target` | `specific`, plus `version`, `publication_type`, `update_component`). `GET /rest/v4/update/info`.
   - `nx_read_get_build_status` — site-wide state keyed by server id (`state`: `idle` | `starting` | `downloading` | `preparing` | `readyToInstall` | `latestUpdateInstalled` | `offline` | `error`, with `progress` and an error code such as `noFreeSpaceToDownload`). `GET /rest/v4/update`.
@@ -21,6 +27,9 @@ This project uses [Semantic Versioning](https://semver.org/).
   The five mutating tools carry `destructiveHint: true` so the control-plane gateway hides them from read-only groups; the three reads carry `readOnlyHint: true`. All of them require the `system` parameter like every other tool, and the whole family is **Nx 6.x and newer** — older servers return 404. Every tool except the two `nx_read_get_build_info`/`nx_read_get_build_status` reads needs a **Power User** credential on the site.
 
   Tool names use the noun **`build`** rather than `update` deliberately: `update` is a mutating verb, and the control plane's tool-contract inspector reads such a token in a read-only tool's *name* as evidence the tool mutates — the same false positive that forced the `nx_read_virtual_get_upload_status` rename (issue #19). `POST /rest/v4/update/storage` (setting which servers hold update files) is intentionally not wrapped; it is rarely touched and adds mutating surface area for no operational gain.
+
+### Fixed
+- `nx_read_camera_snapshot` failed on every call with `a bytes-like object is required, not 'str'`: the client base64-encoded the JPEG and passed the string to fastmcp's `Image(data=...)`, which expects raw bytes and does its own encoding. `get_camera_snapshot()` now returns raw bytes.
 
 ### Changed
 - Renamed the read-only tool `nx_read_virtual_get_upload_status` → **`nx_read_virtual_get_transfer_status`**. The tool is genuinely read-only (HTTP `GET`, `readOnlyHint: true`), but the TWG MCP Control Plane's tool-contract inspector read the `upload` token in the old name as a mutating verb and treated the tool as destructive (denied to non-admin users, standing alarm — see issue #19). Dropping that token from the name clears the false positive; the annotation, parameters, behavior, and underlying endpoint are unchanged. The rename itself did not change the tool count. **Breaking:** callers referencing the old tool name must switch to the new name.

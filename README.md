@@ -15,6 +15,7 @@ NX Witness MCP exposes your NX Witness system as a set of Claude tools, allowing
 - Create and manage bookmarks, rules, and triggers
 - Monitor system health, metrics, and alarms
 - Manage integrations and analytics engines
+- Search analytics objects (people, vehicles, plates) and pull their best-shot images
 - Check which Nx software build a site is running and push build upgrades to it
 - And much more — the full NX Witness REST API surface
 
@@ -319,10 +320,29 @@ Some NX Witness installations also expose a built-in MCP connector (sometimes li
 | Triggers | `nx_read_get_triggers`, `nx_read_get_trigger`, `nx_write_fire_trigger` |
 | Rules | `nx_read_get_rules`, `nx_read_get_rule`, `nx_write_create_rule`, `nx_update_replace_rule`, `nx_update_modify_rule`, `nx_delete_rule`, `nx_write_reset_rules` |
 | Generic Events | `nx_write_create_generic_event` |
+| Object Search | `nx_read_search_objects`, `nx_read_get_object_track`, `nx_read_get_object_best_shot` |
 | Analytics & Integrations | `nx_read_list_analytics_engines`, `nx_read_list_integrations`, `nx_read_get_integration`, `nx_delete_analytics_integration` |
 | Virtual Uploads | `nx_read_virtual_list_uploads`, `nx_write_virtual_start_upload`, `nx_read_virtual_get_transfer_status`, `nx_delete_virtual_cancel_upload` |
 | Logs & Audit | `nx_read_get_log_settings`, `nx_read_get_server_log`, `nx_read_get_audit_log` |
 | Software Updates | `nx_read_get_build_info`, `nx_read_get_build_status`, `nx_read_get_build_storage_servers`, `nx_write_start_build_download`, `nx_write_install_build`, `nx_write_finish_build_update`, `nx_write_retry_build_update`, `nx_delete_cancel_build_update` |
+
+### Object Search
+
+The same search as Nx Desktop's **Objects** tab, over the Analytics DB:
+
+1. `nx_read_search_objects` — filter by `device_ids`, `object_type_ids` (e.g. `nx.base.Person`,
+   `nx.base.Vehicle`), `free_text` against object attributes (e.g. `red`, a plate number),
+   `start_time_ms`/`end_time_ms`, and `bounding_box` (`{x},{y},{width}x{height}`, normalized 0–1).
+   Newest first, 50 results by default. Each result carries ISO `startTime`/`endTime` alongside
+   the raw ms values; the base64 `objectRegion` grid is dropped unless `include_region=true`.
+2. `nx_read_get_object_track` — one track by id.
+3. `nx_read_get_object_best_shot` — the track's best-shot image as JPEG (needs the track's
+   `deviceId`).
+
+Results only exist for cameras running an analytics plugin that produces objects (Nx AI Manager,
+camera-side analytics, etc.). The credential needs **View Archive** on the searched cameras.
+Object type ids and attribute names come from the engine; run one broad search first to see what
+the site's engine actually reports.
 
 ### Software Updates
 

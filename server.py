@@ -5,7 +5,7 @@ import os
 import sys
 import time
 from datetime import datetime, timezone
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
 import httpx
 from fastmcp import FastMCP
@@ -383,8 +383,8 @@ async def nx_read_camera_snapshot(
     height: Annotated[Optional[int], Field(default=None, description="Optional height in pixels")] = None,
 ) -> Image:
     """Capture a live snapshot image from a camera. Returns a JPEG image."""
-    b64 = await get_client(system).get_camera_snapshot(device_id, width=width, height=height)
-    return Image(data=b64, format="jpeg")
+    img = await get_client(system).get_camera_snapshot(device_id, width=width, height=height)
+    return Image(data=img, format="jpeg")
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -962,6 +962,85 @@ async def nx_delete_analytics_integration(
 ) -> dict:
     """Remove an SDK analytics integration from the server. This is destructive and cannot be undone."""
     return await get_client(system).delete_analytics_integration(integration_id)
+
+
+# ---------------------------------------------------------------------------
+# Tools — Analytics Object Search
+# ---------------------------------------------------------------------------
+
+def _iso_ms(ms: Any) -> str | None:
+    try:
+        return datetime.fromtimestamp(int(ms) / 1000, tz=timezone.utc).isoformat()
+    except (TypeError, ValueError):
+        return None
+
+
+def _compact_track(t: dict, include_region: bool = False) -> dict:
+    """Add ISO timestamps and drop the base64 region grid (noise for an LLM) unless asked."""
+    out = dict(t)
+    out["startTime"] = _iso_ms(t.get("startTimeMs"))
+    out["endTime"] = _iso_ms(t.get("endTimeMs"))
+    if not include_region:
+        out.pop("objectRegion", None)
+    return out
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_search_objects(
+    system: SYS,
+    device_ids: Annotated[Optional[list[str]], Field(default=None, description="Limit to these camera/device UUIDs (default: all devices)")] = None,
+    object_type_ids: Annotated[Optional[list[str]], Field(default=None, description="Limit to these object type ids as reported by the analytics engine, e.g. 'nx.base.Person', 'nx.base.Vehicle'")] = None,
+    free_text: Annotated[Optional[str], Field(default=None, description="Free-text match against object attributes, e.g. 'red', 'Color: Red', a license plate number")] = None,
+    start_time_ms: Annotated[Optional[int], Field(default=None, description="Start of search window (Unix ms, UTC)")] = None,
+    end_time_ms: Annotated[Optional[int], Field(default=None, description="End of search window (Unix ms, UTC)")] = None,
+    bounding_box: Annotated[Optional[str], Field(default=None, description="Frame region to search within, normalized [0..1], format '{x},{y},{width}x{height}' e.g. '0.5,0,0.5x1' for the right half")] = None,
+    analytics_engine_id: Annotated[Optional[str], Field(default=None, description="Only objects detected by this analytics engine UUID (see nx_read_list_analytics_engines)")] = None,
+    limit: Annotated[int, Field(default=50, description="Max object tracks to return (default 50)")] = 50,
+    sort_order: Annotated[str, Field(default="desc", description="Sort by track start time: 'desc' (newest first, default) or 'asc'")] = "desc",
+    include_region: Annotated[bool, Field(default=False, description="Include the raw base64 objectRegion grid (large; off by default)")] = False,
+) -> list:
+    """Object search: query the Analytics DB for detected objects (people, vehicles, faces,
+    plates, etc.) — the same search as Nx Desktop's Objects tab. Filter by camera, object
+    type, attribute text, time window, and frame region. Each result is an object track with
+    its id, deviceId, objectTypeId, start/end time, attributes, and bestShot info; pass the
+    id and deviceId to nx_read_get_object_best_shot to see the image. Requires View Archive
+    permission on the searched devices and an analytics plugin that produces objects."""
+    tracks = await get_client(system).search_object_tracks(
+        device_ids=device_ids,
+        object_type_ids=object_type_ids,
+        free_text=free_text,
+        start_time_ms=start_time_ms,
+        end_time_ms=end_time_ms,
+        bounding_box=bounding_box,
+        analytics_engine_id=analytics_engine_id,
+        limit=limit,
+        sort_order=sort_order,
+    )
+    return [_compact_track(t, include_region) for t in (tracks or [])]
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_object_track(
+    track_id: Annotated[str, Field(description="Object track UUID (from nx_read_search_objects)")],
+    system: SYS,
+    include_region: Annotated[bool, Field(default=False, description="Include the raw base64 objectRegion grid (large; off by default)")] = False,
+) -> dict:
+    """Get a single analytics object track by ID: object type, attributes, start/end time,
+    best shot and title info."""
+    track = await get_client(system).get_object_track(track_id)
+    return _compact_track(track, include_region)
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_object_best_shot(
+    track_id: Annotated[str, Field(description="Object track UUID (from nx_read_search_objects)")],
+    device_id: Annotated[str, Field(description="Device UUID the object was detected on (the track's deviceId)")],
+    system: SYS,
+) -> Image:
+    """Get the Best Shot image (the clearest frame of the detected object) for an analytics
+    object track. Returns a JPEG image. Fails with 404 if the engine produced no best shot."""
+    img = await get_client(system).get_object_track_best_shot(track_id, device_id)
+    return Image(data=img, format="jpeg")
 
 
 # ---------------------------------------------------------------------------
