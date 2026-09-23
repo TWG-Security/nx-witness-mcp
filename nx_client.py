@@ -10,6 +10,7 @@ class NXClient:
         self.username = username
         self.password = password
         self._token: str | None = None
+        self._site_info: dict | None = None
         self._client = httpx.AsyncClient(verify=False, follow_redirects=True)
 
     async def _login(self) -> None:
@@ -600,6 +601,38 @@ class NXClient:
         if sort_order:
             params["sortOrder"] = sort_order
         return await self._get("/rest/v4/analytics/objectTracks", params=params or None)
+
+    async def collect_object_tracks(self, max_tracks: int, page_size: int = 1000, **filters: Any) -> tuple[list[dict], bool]:
+        """Fetch up to max_tracks tracks, newest first, paging backwards in time.
+
+        The API has `limit` but no offset, so each page narrows endTimeMs to the
+        oldest start seen so far. Tracks straddling the boundary come back again
+        and are de-duplicated by id. Returns (tracks, truncated).
+        """
+        seen: dict[str, dict] = {}
+        end_ms = filters.pop("end_time_ms", None)
+        while True:
+            # Always ask for a full page: a short request could be filled entirely by
+            # boundary duplicates and end the scan early.
+            page = await self.search_object_tracks(
+                **filters, end_time_ms=end_ms, limit=page_size, sort_order="desc"
+            ) or []
+            new = [t for t in page if t.get("id") not in seen]
+            room = max_tracks - len(seen)
+            for t in new[:room]:
+                seen[t.get("id")] = t
+            if len(page) < page_size:
+                return list(seen.values()), len(new) > room
+            if len(seen) >= max_tracks or not new:
+                # Cap reached, or more than page_size tracks share one start time.
+                return list(seen.values()), True
+            end_ms = min(int(t["startTimeMs"]) for t in page)
+
+    async def get_site_info(self) -> dict:
+        """GET /rest/v4/site/info — cached; ids and cloud binding don't change at runtime."""
+        if self._site_info is None:
+            self._site_info = await self._get("/rest/v4/site/info")
+        return self._site_info
 
     async def get_object_track(self, track_id: str) -> dict:
         return await self._get(f"/rest/v4/analytics/objectTracks/{track_id}")

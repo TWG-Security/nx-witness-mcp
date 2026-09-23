@@ -320,7 +320,7 @@ Some NX Witness installations also expose a built-in MCP connector (sometimes li
 | Triggers | `nx_read_get_triggers`, `nx_read_get_trigger`, `nx_write_fire_trigger` |
 | Rules | `nx_read_get_rules`, `nx_read_get_rule`, `nx_write_create_rule`, `nx_update_replace_rule`, `nx_update_modify_rule`, `nx_delete_rule`, `nx_write_reset_rules` |
 | Generic Events | `nx_write_create_generic_event` |
-| Object Search | `nx_read_search_objects`, `nx_read_get_object_track`, `nx_read_get_object_best_shot` |
+| Object Search & Analytics | `nx_read_search_objects`, `nx_read_get_object_track`, `nx_read_get_object_best_shot`, `nx_read_summarize_objects`, `nx_read_get_vms_link` |
 | Analytics & Integrations | `nx_read_list_analytics_engines`, `nx_read_list_integrations`, `nx_read_get_integration`, `nx_delete_analytics_integration` |
 | Virtual Uploads | `nx_read_virtual_list_uploads`, `nx_write_virtual_start_upload`, `nx_read_virtual_get_transfer_status`, `nx_delete_virtual_cancel_upload` |
 | Logs & Audit | `nx_read_get_log_settings`, `nx_read_get_server_log`, `nx_read_get_audit_log` |
@@ -338,6 +338,20 @@ The same search as Nx Desktop's **Objects** tab, over the Analytics DB:
 2. `nx_read_get_object_track` — one track by id.
 3. `nx_read_get_object_best_shot` — the track's best-shot image as JPEG (needs the track's
    `deviceId`).
+
+4. `nx_read_summarize_objects` — counts over a time window, computed server-side, grouped by
+   `camera`, `object_type`, `engine`, `hour`/`day` (timelines), `hour_of_day`, `day_of_week`, or
+   `attribute:<Name>` (e.g. `attribute:Color`). Pass `timezone_name` (e.g. `America/New_York`) so
+   time buckets match the site's business hours. Scans up to `max_tracks` (default 5000, max
+   20000); `truncated: true` means the counts cover only the newest tracks — narrow the window.
+   Also lists the attribute names seen, for follow-up grouping.
+5. `nx_read_get_vms_link` — an `nx-vms://` link that opens the Nx desktop/mobile client at a
+   track's camera, a few seconds before the object appears (`pre_roll_seconds`, default 3). Also
+   takes `device_ids` + `timestamp_ms` for any camera/time, or live view with no timestamp.
+   **The link carries no credentials** — the viewer's own Nx client authenticates them with their
+   own permissions, so it is safe to put in chat or a report. Cloud-bound sites produce
+   `nx-vms://{cloudHost}/client/{cloudId}/view?...`, which works anywhere; local-only sites fall
+   back to the configured server address and only open on a network that can reach it.
 
 Results only exist for cameras running an analytics plugin that produces objects (Nx AI Manager,
 camera-side analytics, etc.). The credential needs **View Archive** on the searched cameras.
