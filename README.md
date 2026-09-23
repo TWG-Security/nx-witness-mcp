@@ -15,6 +15,7 @@ NX Witness MCP exposes your NX Witness system as a set of Claude tools, allowing
 - Create and manage bookmarks, rules, and triggers
 - Monitor system health, metrics, and alarms
 - Manage integrations and analytics engines
+- Search analytics objects (people, vehicles, plates) and pull their best-shot images
 - Check which Nx software build a site is running and push build upgrades to it
 - And much more — the full NX Witness REST API surface
 
@@ -262,10 +263,9 @@ server is running, attach it to a gateway.
 
 ### Governance annotations
 
-`tools/list` advertises `readOnlyHint: true` on the 39 read-only tools and
-`readOnlyHint: false` + `destructiveHint: true` on the 25 mutating tools, so the gateway
-hides mutating tools from read-only groups. The full tool set (64 tools) is unchanged by
-this deployment adaptation.
+`tools/list` advertises `readOnlyHint: true` on the 48 read-only tools and
+`readOnlyHint: false` + `destructiveHint: true` on the 30 mutating tools, so the gateway
+hides mutating tools from read-only groups (78 tools in total as of v3.0.0).
 
 ---
 
@@ -306,7 +306,7 @@ Some NX Witness installations also expose a built-in MCP connector (sometimes li
 
 | Category | Tools |
 |----------|-------|
-| Systems | `nx_read_list_systems`, `nx_read_server_info`, `nx_read_list_servers` |
+| Systems | `nx_read_list_systems`, `nx_read_get_site_info`, `nx_read_server_info`, `nx_read_list_servers` |
 | Cameras & Devices | `nx_read_list_cameras`, `nx_read_get_camera`, `nx_write_create_device`, `nx_update_replace_device`, `nx_update_modify_device`, `nx_delete_device`, `nx_read_get_device_status`, `nx_read_get_device_io`, `nx_update_set_device_io`, `nx_read_camera_snapshot`, `nx_read_camera_stream_url` |
 | Device Search | `nx_read_list_device_searches`, `nx_write_start_device_search`, `nx_read_get_device_search`, `nx_delete_stop_device_search`, `nx_read_get_device_types`, `nx_read_get_device_diagnosis`, `nx_read_get_all_devices_diagnosis` |
 | Recording | `nx_read_get_footage` |
@@ -319,10 +319,43 @@ Some NX Witness installations also expose a built-in MCP connector (sometimes li
 | Triggers | `nx_read_get_triggers`, `nx_read_get_trigger`, `nx_write_fire_trigger` |
 | Rules | `nx_read_get_rules`, `nx_read_get_rule`, `nx_write_create_rule`, `nx_update_replace_rule`, `nx_update_modify_rule`, `nx_delete_rule`, `nx_write_reset_rules` |
 | Generic Events | `nx_write_create_generic_event` |
+| Object Search & Analytics | `nx_read_search_objects`, `nx_read_get_object_track`, `nx_read_get_object_best_shot`, `nx_read_summarize_objects`, `nx_read_get_vms_link` |
 | Analytics & Integrations | `nx_read_list_analytics_engines`, `nx_read_list_integrations`, `nx_read_get_integration`, `nx_delete_analytics_integration` |
 | Virtual Uploads | `nx_read_virtual_list_uploads`, `nx_write_virtual_start_upload`, `nx_read_virtual_get_transfer_status`, `nx_delete_virtual_cancel_upload` |
 | Logs & Audit | `nx_read_get_log_settings`, `nx_read_get_server_log`, `nx_read_get_audit_log` |
 | Software Updates | `nx_read_get_build_info`, `nx_read_get_build_status`, `nx_read_get_build_storage_servers`, `nx_write_start_build_download`, `nx_write_install_build`, `nx_write_finish_build_update`, `nx_write_retry_build_update`, `nx_delete_cancel_build_update` |
+
+### Object Search
+
+The same search as Nx Desktop's **Objects** tab, over the Analytics DB:
+
+1. `nx_read_search_objects` — filter by `device_ids`, `object_type_ids` (e.g. `nx.base.Person`,
+   `nx.base.Vehicle`), `free_text` against object attributes (e.g. `red`, a plate number),
+   `start_time_ms`/`end_time_ms`, and `bounding_box` (`{x},{y},{width}x{height}`, normalized 0–1).
+   Newest first, 50 results by default. Each result carries ISO `startTime`/`endTime` alongside
+   the raw ms values; the base64 `objectRegion` grid is dropped unless `include_region=true`.
+2. `nx_read_get_object_track` — one track by id.
+3. `nx_read_get_object_best_shot` — the track's best-shot image as JPEG (needs the track's
+   `deviceId`).
+
+4. `nx_read_summarize_objects` — counts over a time window, computed server-side, grouped by
+   `camera`, `object_type`, `engine`, `hour`/`day` (timelines), `hour_of_day`, `day_of_week`, or
+   `attribute:<Name>` (e.g. `attribute:Color`). Pass `timezone_name` (e.g. `America/New_York`) so
+   time buckets match the site's business hours. Scans up to `max_tracks` (default 5000, max
+   20000); `truncated: true` means the counts cover only the newest tracks — narrow the window.
+   Also lists the attribute names seen, for follow-up grouping.
+5. `nx_read_get_vms_link` — an `nx-vms://` link that opens the Nx desktop/mobile client at a
+   track's camera, a few seconds before the object appears (`pre_roll_seconds`, default 3). Also
+   takes `device_ids` + `timestamp_ms` for any camera/time, or live view with no timestamp.
+   **The link carries no credentials** — the viewer's own Nx client authenticates them with their
+   own permissions, so it is safe to put in chat or a report. Cloud-bound sites produce
+   `nx-vms://{cloudHost}/client/{cloudId}/view?...`, which works anywhere; local-only sites fall
+   back to the configured server address and only open on a network that can reach it.
+
+Results only exist for cameras running an analytics plugin that produces objects (Nx AI Manager,
+camera-side analytics, etc.). The credential needs **View Archive** on the searched cameras.
+Object type ids and attribute names come from the engine; run one broad search first to see what
+the site's engine actually reports.
 
 ### Software Updates
 
@@ -371,6 +404,14 @@ MIT
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.
+
+### v3.0.0 (2026-09-23) — Breaking change
+- **Renamed** `nx_read_virtual_get_upload_status` → `nx_read_virtual_get_transfer_status`; update any callers using the old name.
+- Added analytics object search: `nx_read_search_objects`, `nx_read_get_object_track`, `nx_read_get_object_best_shot`, server-side counts with `nx_read_summarize_objects`, and credential-free Nx client deep links with `nx_read_get_vms_link`. See [Object Search](#object-search).
+- Added `nx_read_get_site_info` (site name, version, local and Nx Cloud ids, connection type).
+- Added the 8 Nx software build (update) tools. See [Software Updates](#software-updates).
+- Fixed `nx_read_camera_snapshot`, which failed on every call.
+- The server now reports its version in the MCP handshake. 64 -> 78 tools.
 
 ### v2.2.0 (2026-07-14)
 - Added per-site env vars `NX_SYSTEM_<NAME>_HOST`/`_USER`/`_PASS` for multi-system config, and fixed multi-system deployments that used them being silently ignored (the server had no parser and fell back to the single-system default). See [Multiple systems](#multiple-systems).

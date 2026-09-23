@@ -1,8 +1,11 @@
 """NX Witness API client."""
 
-import base64
+import re
 from typing import Any
 import httpx
+
+# Nx Cloud relay hosts embed the site's cloud id: https://{cloudId}.relay[-region].vmsproxy.com
+_RELAY_HOST = re.compile(r"^https?://([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.relay[\w-]*\.vmsproxy\.com", re.I)
 
 
 class NXClient:
@@ -11,6 +14,7 @@ class NXClient:
         self.username = username
         self.password = password
         self._token: str | None = None
+        self._site_info: dict | None = None
         self._client = httpx.AsyncClient(verify=False, follow_redirects=True)
 
     async def _login(self) -> None:
@@ -107,8 +111,8 @@ class NXClient:
     async def get_device(self, device_id: str) -> dict:
         return await self._get(f"/rest/v4/devices/{device_id}")
 
-    async def get_camera_snapshot(self, device_id: str, width: int | None = None, height: int | None = None) -> str:
-        """Returns base64-encoded JPEG image."""
+    async def get_camera_snapshot(self, device_id: str, width: int | None = None, height: int | None = None) -> bytes:
+        """Returns raw JPEG bytes."""
         ticket_resp = await self._post("/rest/v4/login/tickets")
         ticket = ticket_resp.get("token") or ticket_resp.get("ticket") or ""
         if isinstance(ticket, dict):
@@ -118,8 +122,7 @@ class NXClient:
             params["width"] = width
         if height:
             params["height"] = height
-        img = await self._get_bytes(f"/rest/v4/devices/{device_id}/image", params=params)
-        return base64.b64encode(img).decode()
+        return await self._get_bytes(f"/rest/v4/devices/{device_id}/image", params=params)
 
     async def get_camera_stream_url(self, device_id: str) -> str:
         ticket_resp = await self._post("/rest/v4/login/tickets")
@@ -564,6 +567,101 @@ class NXClient:
 
     async def delete_analytics_integration(self, integration_id: str) -> Any:
         return await self._delete(f"/rest/v4/analytics/integrations/{integration_id}")
+
+    # -------------------------------------------------------------------------
+    # Analytics Object Search (object tracks in the Analytics DB)
+    # -------------------------------------------------------------------------
+
+    async def search_object_tracks(
+        self,
+        device_ids: list[str] | None = None,
+        object_type_ids: list[str] | None = None,
+        free_text: str | None = None,
+        start_time_ms: int | None = None,
+        end_time_ms: int | None = None,
+        bounding_box: str | None = None,
+        analytics_engine_id: str | None = None,
+        limit: int | None = None,
+        sort_order: str | None = None,
+    ) -> list[dict]:
+        # List values are sent as repeated query params (deviceId=a&deviceId=b).
+        params: dict[str, Any] = {}
+        if device_ids:
+            params["deviceId"] = device_ids
+        if object_type_ids:
+            params["objectTypeId"] = object_type_ids
+        if free_text:
+            params["freeText"] = free_text
+        if start_time_ms is not None:
+            params["startTimeMs"] = start_time_ms
+        if end_time_ms is not None:
+            params["endTimeMs"] = end_time_ms
+        if bounding_box:
+            params["boundingBox"] = bounding_box
+        if analytics_engine_id:
+            params["analyticsEngineId"] = analytics_engine_id
+        if limit is not None:
+            params["limit"] = limit
+        if sort_order:
+            params["sortOrder"] = sort_order
+        return await self._get("/rest/v4/analytics/objectTracks", params=params or None)
+
+    async def collect_object_tracks(self, max_tracks: int, page_size: int = 1000, **filters: Any) -> tuple[list[dict], bool]:
+        """Fetch up to max_tracks tracks, newest first, paging backwards in time.
+
+        The API has `limit` but no offset, so each page narrows endTimeMs to the
+        oldest start seen so far. Tracks straddling the boundary come back again
+        and are de-duplicated by id. Returns (tracks, truncated).
+        """
+        seen: dict[str, dict] = {}
+        end_ms = filters.pop("end_time_ms", None)
+        while True:
+            # Always ask for a full page: a short request could be filled entirely by
+            # boundary duplicates and end the scan early.
+            page = await self.search_object_tracks(
+                **filters, end_time_ms=end_ms, limit=page_size, sort_order="desc"
+            ) or []
+            new = [t for t in page if t.get("id") not in seen]
+            room = max_tracks - len(seen)
+            for t in new[:room]:
+                seen[t.get("id")] = t
+            if len(page) < page_size:
+                return list(seen.values()), len(new) > room
+            if len(seen) >= max_tracks or not new:
+                # Cap reached, or more than page_size tracks share one start time.
+                return list(seen.values()), True
+            end_ms = min(int(t["startTimeMs"]) for t in page)
+
+    def relay_cloud_id(self) -> str | None:
+        """Cloud id parsed from a relay host URL, or None for LAN/Tailscale hosts."""
+        m = _RELAY_HOST.match(self.base_url)
+        return m.group(1).lower() if m else None
+
+    async def get_site_info(self) -> dict:
+        """GET /rest/v4/site/info — cached; ids and cloud binding don't change at runtime.
+
+        If the call fails (older server, restricted user) on a relay-configured site,
+        fall back to the cloud id embedded in the host so links still work.
+        """
+        if self._site_info is None:
+            try:
+                self._site_info = await self._get("/rest/v4/site/info")
+            except httpx.HTTPStatusError:
+                cloud_id = self.relay_cloud_id()
+                if not cloud_id:
+                    raise
+                self._site_info = {"cloudId": cloud_id, "cloudHost": "nxvms.com", "source": "relay_host"}
+        return self._site_info
+
+    async def get_object_track(self, track_id: str) -> dict:
+        return await self._get(f"/rest/v4/analytics/objectTracks/{track_id}")
+
+    async def get_object_track_best_shot(self, track_id: str, device_id: str) -> bytes:
+        """Returns the track's Best Shot as raw JPEG bytes (server converts to jpg)."""
+        return await self._get_bytes(
+            f"/rest/v4/analytics/objectTracks/{track_id}/bestShotImage.jpg",
+            params={"deviceId": device_id},
+        )
 
     # -------------------------------------------------------------------------
     # Server Logs

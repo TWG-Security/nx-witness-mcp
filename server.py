@@ -4,8 +4,11 @@
 import os
 import sys
 import time
+from collections import Counter
 from datetime import datetime, timezone
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
+from urllib.parse import urlencode
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from fastmcp import FastMCP
@@ -15,6 +18,8 @@ from pydantic import Field
 from starlette.responses import PlainTextResponse
 
 from nx_client import NXClient
+
+__version__ = "3.0.0"
 
 # ---------------------------------------------------------------------------
 # Multi-system configuration
@@ -116,7 +121,7 @@ SYSTEMS: dict[str, dict] = _load_systems()
 DEFAULT_SYSTEM: str = next(iter(SYSTEMS))   # first key is the default
 _clients: dict[str, NXClient] = {}
 
-mcp = FastMCP("nx-witness")
+mcp = FastMCP("nx-witness", version=__version__)
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +211,33 @@ async def nx_read_list_systems() -> dict:
 async def nx_read_server_info(system: SYS) -> dict:
     """Get NX Witness server information including name, version, and system details."""
     return await get_client(system).get_server_info()
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_site_info(system: SYS) -> dict:
+    """Get site-level identity: site name, Nx version, local site id, Nx Cloud id and host
+    (if the site is bound to Nx Cloud), cloud owner/organization, and server/device counts.
+    Also reports how this MCP connects (Nx Cloud relay or direct address)."""
+    client = get_client(system)
+    site = await client.get_site_info()
+    relay_id = client.relay_cloud_id()
+    return {
+        "system": system,
+        "name": site.get("name"),
+        "version": site.get("version"),
+        "local_id": site.get("localId"),
+        "cloud_id": site.get("cloudId"),
+        "cloud_host": site.get("cloudHost"),
+        "cloud_owner_id": site.get("cloudOwnerId"),
+        "organization_id": site.get("organizationId"),
+        "server_count": len(site["servers"]) if "servers" in site else None,
+        "edge_server_count": site.get("edgeServerCount"),
+        "device_count": len(site["devices"]) if "devices" in site else None,
+        "site_time": _iso_ms(site.get("synchronizedTimeMs")),
+        "connection": "relay" if relay_id else "direct",
+        # Only set when site/info was refused and the id came from the relay hostname.
+        "source": site.get("source", "site_info"),
+    }
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -383,8 +415,8 @@ async def nx_read_camera_snapshot(
     height: Annotated[Optional[int], Field(default=None, description="Optional height in pixels")] = None,
 ) -> Image:
     """Capture a live snapshot image from a camera. Returns a JPEG image."""
-    b64 = await get_client(system).get_camera_snapshot(device_id, width=width, height=height)
-    return Image(data=b64, format="jpeg")
+    img = await get_client(system).get_camera_snapshot(device_id, width=width, height=height)
+    return Image(data=img, format="jpeg")
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -962,6 +994,242 @@ async def nx_delete_analytics_integration(
 ) -> dict:
     """Remove an SDK analytics integration from the server. This is destructive and cannot be undone."""
     return await get_client(system).delete_analytics_integration(integration_id)
+
+
+# ---------------------------------------------------------------------------
+# Tools — Analytics Object Search
+# ---------------------------------------------------------------------------
+
+def _iso_ms(ms: Any) -> str | None:
+    try:
+        return datetime.fromtimestamp(int(ms) / 1000, tz=timezone.utc).isoformat()
+    except (TypeError, ValueError):
+        return None
+
+
+def _compact_track(t: dict, include_region: bool = False) -> dict:
+    """Add ISO timestamps and drop the base64 region grid (noise for an LLM) unless asked."""
+    out = dict(t)
+    out["startTime"] = _iso_ms(t.get("startTimeMs"))
+    out["endTime"] = _iso_ms(t.get("endTimeMs"))
+    if not include_region:
+        out.pop("objectRegion", None)
+    return out
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_search_objects(
+    system: SYS,
+    device_ids: Annotated[Optional[list[str]], Field(default=None, description="Limit to these camera/device UUIDs (default: all devices)")] = None,
+    object_type_ids: Annotated[Optional[list[str]], Field(default=None, description="Limit to these object type ids as reported by the analytics engine, e.g. 'nx.base.Person', 'nx.base.Vehicle'")] = None,
+    free_text: Annotated[Optional[str], Field(default=None, description="Free-text match against object attributes, e.g. 'red', 'Color: Red', a license plate number")] = None,
+    start_time_ms: Annotated[Optional[int], Field(default=None, description="Start of search window (Unix ms, UTC)")] = None,
+    end_time_ms: Annotated[Optional[int], Field(default=None, description="End of search window (Unix ms, UTC)")] = None,
+    bounding_box: Annotated[Optional[str], Field(default=None, description="Frame region to search within, normalized [0..1], format '{x},{y},{width}x{height}' e.g. '0.5,0,0.5x1' for the right half")] = None,
+    analytics_engine_id: Annotated[Optional[str], Field(default=None, description="Only objects detected by this analytics engine UUID (see nx_read_list_analytics_engines)")] = None,
+    limit: Annotated[int, Field(default=50, description="Max object tracks to return (default 50)")] = 50,
+    sort_order: Annotated[str, Field(default="desc", description="Sort by track start time: 'desc' (newest first, default) or 'asc'")] = "desc",
+    include_region: Annotated[bool, Field(default=False, description="Include the raw base64 objectRegion grid (large; off by default)")] = False,
+) -> list:
+    """Object search: query the Analytics DB for detected objects (people, vehicles, faces,
+    plates, etc.) — the same search as Nx Desktop's Objects tab. Filter by camera, object
+    type, attribute text, time window, and frame region. Each result is an object track with
+    its id, deviceId, objectTypeId, start/end time, attributes, and bestShot info; pass the
+    id and deviceId to nx_read_get_object_best_shot to see the image. Requires View Archive
+    permission on the searched devices and an analytics plugin that produces objects."""
+    tracks = await get_client(system).search_object_tracks(
+        device_ids=device_ids,
+        object_type_ids=object_type_ids,
+        free_text=free_text,
+        start_time_ms=start_time_ms,
+        end_time_ms=end_time_ms,
+        bounding_box=bounding_box,
+        analytics_engine_id=analytics_engine_id,
+        limit=limit,
+        sort_order=sort_order,
+    )
+    return [_compact_track(t, include_region) for t in (tracks or [])]
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_object_track(
+    track_id: Annotated[str, Field(description="Object track UUID (from nx_read_search_objects)")],
+    system: SYS,
+    include_region: Annotated[bool, Field(default=False, description="Include the raw base64 objectRegion grid (large; off by default)")] = False,
+) -> dict:
+    """Get a single analytics object track by ID: object type, attributes, start/end time,
+    best shot and title info."""
+    track = await get_client(system).get_object_track(track_id)
+    return _compact_track(track, include_region)
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_object_best_shot(
+    track_id: Annotated[str, Field(description="Object track UUID (from nx_read_search_objects)")],
+    device_id: Annotated[str, Field(description="Device UUID the object was detected on (the track's deviceId)")],
+    system: SYS,
+) -> Image:
+    """Get the Best Shot image (the clearest frame of the detected object) for an analytics
+    object track. Returns a JPEG image. Fails with 404 if the engine produced no best shot."""
+    img = await get_client(system).get_object_track_best_shot(track_id, device_id)
+    return Image(data=img, format="jpeg")
+
+
+_GROUP_DIMS = ("camera", "object_type", "engine", "hour", "day", "hour_of_day", "day_of_week")
+_DOW = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def _check_dim(dim: str) -> None:
+    if dim not in _GROUP_DIMS and not (dim.startswith("attribute:") and len(dim) > len("attribute:")):
+        raise ValueError(
+            f"Unknown group_by '{dim}'. Use one of {list(_GROUP_DIMS)} or 'attribute:<Name>'."
+        )
+
+
+def _bucket(dim: str, t: dict, tz: ZoneInfo) -> str | None:
+    if dim == "camera":
+        return t.get("deviceId")
+    if dim == "object_type":
+        return t.get("objectTypeId")
+    if dim == "engine":
+        return t.get("analyticsEngineId")
+    if dim.startswith("attribute:"):
+        name = dim.split(":", 1)[1].lower()
+        vals = sorted({a.get("value") for a in t.get("attributes") or [] if str(a.get("name", "")).lower() == name})
+        return ", ".join(v for v in vals if v) or None
+    ts = datetime.fromtimestamp(int(t["startTimeMs"]) / 1000, tz=tz)
+    if dim == "hour":
+        return ts.strftime("%Y-%m-%d %H:00")
+    if dim == "day":
+        return ts.strftime("%Y-%m-%d")
+    if dim == "hour_of_day":
+        return f"{ts.hour:02d}"
+    return _DOW[ts.weekday()]  # day_of_week
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_summarize_objects(
+    system: SYS,
+    start_time_ms: Annotated[int, Field(description="Start of window (Unix ms, UTC). Required so a summary is always bounded.")],
+    end_time_ms: Annotated[Optional[int], Field(default=None, description="End of window (Unix ms, UTC); default now")] = None,
+    group_by: Annotated[list[str], Field(default=["camera", "object_type", "hour_of_day"], description="Dimensions to count by, each counted independently: 'camera', 'object_type', 'engine', 'hour' (timeline), 'day' (timeline), 'hour_of_day' (00-23), 'day_of_week', or 'attribute:<Name>' e.g. 'attribute:Color'")] = ["camera", "object_type", "hour_of_day"],
+    device_ids: Annotated[Optional[list[str]], Field(default=None, description="Limit to these camera/device UUIDs")] = None,
+    object_type_ids: Annotated[Optional[list[str]], Field(default=None, description="Limit to these object type ids, e.g. 'nx.base.Vehicle'")] = None,
+    free_text: Annotated[Optional[str], Field(default=None, description="Free-text match against object attributes")] = None,
+    bounding_box: Annotated[Optional[str], Field(default=None, description="Frame region, normalized '{x},{y},{width}x{height}'")] = None,
+    analytics_engine_id: Annotated[Optional[str], Field(default=None, description="Only objects from this analytics engine UUID")] = None,
+    timezone_name: Annotated[str, Field(default="UTC", description="IANA timezone for hour/day buckets, e.g. 'America/New_York'. Use the site's local zone for business-hours questions.")] = "UTC",
+    top_n: Annotated[int, Field(default=20, description="Max rows per non-timeline dimension (default 20)")] = 20,
+    max_tracks: Annotated[int, Field(default=5000, ge=1, le=20000, description="Cap on tracks scanned (default 5000, max 20000). If hit, 'truncated' is true and counts cover only the newest tracks.")] = 5000,
+) -> dict:
+    """Object analytics: count detected objects over a time window, grouped by camera,
+    object type, time bucket, or attribute value — computed server-side so thousands of
+    detections come back as a few small tables. Use for questions like 'how many vehicles
+    per camera yesterday', 'busiest hours for people at the dock', 'most common vehicle
+    colors this week'. Also returns the attribute names seen, for follow-up grouping.
+    Use nx_read_search_objects to list individual detections."""
+    try:
+        tz = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        raise ValueError(f"Unknown timezone '{timezone_name}'. Use an IANA name like 'America/New_York'.")
+    for dim in group_by:  # fail fast, before scanning thousands of tracks
+        _check_dim(dim)
+
+    client = get_client(system)
+    tracks, truncated = await client.collect_object_tracks(
+        max_tracks,
+        device_ids=device_ids,
+        object_type_ids=object_type_ids,
+        free_text=free_text,
+        start_time_ms=start_time_ms,
+        end_time_ms=end_time_ms,
+        bounding_box=bounding_box,
+        analytics_engine_id=analytics_engine_id,
+    )
+    cameras = {d.get("id"): d.get("name") for d in await client.list_devices()} if "camera" in group_by else {}
+
+    counts: dict[str, Counter] = {dim: Counter() for dim in group_by}
+    attr_names: Counter = Counter()
+    for t in tracks:
+        for dim in group_by:
+            key = _bucket(dim, t, tz)
+            if key is not None:
+                counts[dim][key] += 1
+        attr_names.update({a.get("name") for a in t.get("attributes") or [] if a.get("name")})
+
+    groups: dict[str, list] = {}
+    for dim, c in counts.items():
+        if dim in ("hour", "day"):
+            rows = sorted(c.items())
+        elif dim == "hour_of_day":
+            rows = [(f"{h:02d}", c.get(f"{h:02d}", 0)) for h in range(24)]
+        elif dim == "day_of_week":
+            rows = [(d, c.get(d, 0)) for d in _DOW]
+        else:
+            rows = c.most_common(top_n)
+        groups[dim] = [
+            {"key": k, "count": n, **({"name": cameras.get(k)} if dim == "camera" else {})}
+            for k, n in rows
+        ]
+
+    starts = [int(t["startTimeMs"]) for t in tracks]
+    return {
+        "total_tracks": len(tracks),
+        "truncated": truncated,
+        "oldest_track": _iso_ms(min(starts)) if starts else None,
+        "newest_track": _iso_ms(max(starts)) if starts else None,
+        "timezone": timezone_name,
+        "groups": groups,
+        "attribute_names": [n for n, _ in attr_names.most_common(50)],
+    }
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_vms_link(
+    system: SYS,
+    track_id: Annotated[Optional[str], Field(default=None, description="Object track UUID; the link opens its camera at the moment the object appeared")] = None,
+    device_ids: Annotated[Optional[list[str]], Field(default=None, description="Camera UUID(s) to open, when not using track_id")] = None,
+    timestamp_ms: Annotated[Optional[int], Field(default=None, description="Archive position (Unix ms). Omit with device_ids for live view.")] = None,
+    pre_roll_seconds: Annotated[int, Field(default=3, ge=0, description="With track_id: start this many seconds before the object appears (default 3)")] = 3,
+) -> dict:
+    """Build a link that opens the Nx client (desktop or mobile) at a camera and point in
+    time — e.g. straight to an object found by nx_read_search_objects. Give track_id, or
+    device_ids with an optional timestamp_ms (bookmark, event, etc.). The link carries NO
+    credentials: the viewer's own Nx client logs them in with their own permissions, so it is
+    safe to hand to the user. Requires the Nx client installed on the device opening it."""
+    client = get_client(system)
+    if track_id:
+        track = await client.get_object_track(track_id)
+        device_ids = [track["deviceId"]]
+        timestamp_ms = int(track["startTimeMs"]) - pre_roll_seconds * 1000
+    elif not device_ids:
+        raise ValueError("Provide track_id, or device_ids (with optional timestamp_ms).")
+
+    site = await client.get_site_info()
+    if site.get("cloudId"):
+        # Cloud-bound site: the documented form nx-vms://{cloudHost}/client/{cloudId}/view.
+        # Works from anywhere the viewer can reach Nx Cloud.
+        domain, site_id, reach = site.get("cloudHost") or "nxvms.com", site["cloudId"], "cloud"
+    else:
+        # Local-only site: address the server directly; only opens on the site's network.
+        domain = client.base_url.split("://", 1)[-1].rstrip("/")
+        site_id, reach = site.get("localId", ""), "local"
+
+    params = [("resources", ":".join(device_ids))]
+    if timestamp_ms is not None:
+        params.append(("timestamp", str(timestamp_ms)))
+    url = f"nx-vms://{domain}/client/{site_id}/view?{urlencode(params, safe=':')}"
+    out = {
+        "url": url,
+        "site": site.get("name"),
+        "reach": reach,
+        "device_ids": device_ids,
+        "timestamp_ms": timestamp_ms,
+        "time": _iso_ms(timestamp_ms) if timestamp_ms is not None else "live",
+    }
+    if reach == "local":
+        out["note"] = "Site is not bound to Nx Cloud; the link opens only on a network that can reach the server directly."
+    return out
 
 
 # ---------------------------------------------------------------------------
