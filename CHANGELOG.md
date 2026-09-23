@@ -9,8 +9,14 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [3.0.0] - 2026-09-23
+
+Tool count 64 -> 78 (48 read-only, 30 mutating). Major version because of the breaking `nx_read_virtual_get_transfer_status` rename below.
+
 ### Added
-- **Analytics object search and summaries — 5 new read-only tools.** Detected objects (people, vehicles, faces, plates) in the Analytics DB were unreachable over MCP; the only analytics surface was the engine list and `analyticsObject` rows in the event log. The new tools mirror Nx Desktop's *Objects* tab:
+- **Analytics object search, summaries, and VMS links — 5 new read-only tools (72 -> 77).** Detected objects (people, vehicles, faces, plates) in the Analytics DB were unreachable over MCP; the only analytics surface was the engine list and `analyticsObject` rows in the event log. The new tools mirror Nx Desktop's *Objects* tab:
   - `nx_read_search_objects` — `GET /rest/v4/analytics/objectTracks`, with `device_ids`, `object_type_ids`, `free_text`, `start_time_ms`/`end_time_ms`, `bounding_box`, `analytics_engine_id`, `limit` (default 50), and `sort_order` (default `desc`). Results add ISO `startTime`/`endTime` and omit the base64 `objectRegion` grid unless `include_region=true`.
   - `nx_read_get_object_track` — `GET /rest/v4/analytics/objectTracks/{id}`.
   - `nx_read_get_object_best_shot` — `GET /rest/v4/analytics/objectTracks/{id}/bestShotImage.jpg`, returned as a JPEG image.
@@ -18,7 +24,9 @@ This project uses [Semantic Versioning](https://semver.org/).
   - `nx_read_summarize_objects` — server-side counts over a time window, grouped by `camera` (with names), `object_type`, `engine`, `hour`, `day`, `hour_of_day`, `day_of_week`, or `attribute:<Name>`, bucketed in a caller-supplied IANA `timezone_name`. The objectTracks API has `limit` but no offset, so the tool pages backwards by narrowing `endTimeMs` to the oldest start seen and de-duplicating by id; it scans up to `max_tracks` (default 5000, max 20000) and reports `truncated` honestly. Also returns the attribute names seen.
   - `nx_read_get_vms_link` — builds the documented Nx client link `nx-vms://{cloudHost}/client/{cloudId}/view?resources=...&timestamp=...` from `GET /rest/v4/site/info`, for a `track_id` (with `pre_roll_seconds`, default 3) or explicit `device_ids`/`timestamp_ms`. The `auth=` parameter is deliberately never emitted — Nx's example puts base64 `user:password` there — so links are safe to share and each viewer authenticates with their own account. Local-only sites fall back to the configured server address. If `site/info` is refused on a site configured through the Nx Cloud relay, the cloud id is taken from the host itself (`https://{cloudId}.relay.vmsproxy.com`).
 
-  That's 5 tools, taking the server from 72 to 77. All carry `readOnlyHint: true`, require the `system` parameter, and need View Archive permission on the target cameras.
+  All carry `readOnlyHint: true`, require the `system` parameter, and need View Archive permission on the target cameras.
+- **`nx_read_get_site_info`** (77 -> 78) — site identity from `GET /rest/v4/site/info`: name, version, local id, Nx Cloud id/host, cloud owner and organization, server/device counts, site time, and whether this MCP connects through the Nx Cloud relay or directly. If `site/info` is refused on a relay-configured site, `cloud_id` comes from the host (`source: "relay_host"`). Read-only.
+- The server now reports its version (`3.0.0`) in the MCP `serverInfo` handshake (`__version__` in `server.py`).
 - `tzdata` added to `requirements.txt` so IANA timezones resolve in slim container images.
 - **Nx software build (update) tools — 8 new tools, taking the server from 64 to 72.** The v4 `Update` API family had no coverage, so the only build information available was the version string from `nx_read_server_info`, and upgrading a site meant a human in Nx Desktop's *Updates* tab. The new tools drive that flow per site over MCP:
   - `nx_read_get_build_info` — update manifest for a build (`info_category`: `installed` | `latest` | `target` | `specific`, plus `version`, `publication_type`, `update_component`). `GET /rest/v4/update/info`.

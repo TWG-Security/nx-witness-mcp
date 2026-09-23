@@ -19,6 +19,8 @@ from starlette.responses import PlainTextResponse
 
 from nx_client import NXClient
 
+__version__ = "3.0.0"
+
 # ---------------------------------------------------------------------------
 # Multi-system configuration
 # ---------------------------------------------------------------------------
@@ -119,7 +121,7 @@ SYSTEMS: dict[str, dict] = _load_systems()
 DEFAULT_SYSTEM: str = next(iter(SYSTEMS))   # first key is the default
 _clients: dict[str, NXClient] = {}
 
-mcp = FastMCP("nx-witness")
+mcp = FastMCP("nx-witness", version=__version__)
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +211,33 @@ async def nx_read_list_systems() -> dict:
 async def nx_read_server_info(system: SYS) -> dict:
     """Get NX Witness server information including name, version, and system details."""
     return await get_client(system).get_server_info()
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def nx_read_get_site_info(system: SYS) -> dict:
+    """Get site-level identity: site name, Nx version, local site id, Nx Cloud id and host
+    (if the site is bound to Nx Cloud), cloud owner/organization, and server/device counts.
+    Also reports how this MCP connects (Nx Cloud relay or direct address)."""
+    client = get_client(system)
+    site = await client.get_site_info()
+    relay_id = client.relay_cloud_id()
+    return {
+        "system": system,
+        "name": site.get("name"),
+        "version": site.get("version"),
+        "local_id": site.get("localId"),
+        "cloud_id": site.get("cloudId"),
+        "cloud_host": site.get("cloudHost"),
+        "cloud_owner_id": site.get("cloudOwnerId"),
+        "organization_id": site.get("organizationId"),
+        "server_count": len(site["servers"]) if "servers" in site else None,
+        "edge_server_count": site.get("edgeServerCount"),
+        "device_count": len(site["devices"]) if "devices" in site else None,
+        "site_time": _iso_ms(site.get("synchronizedTimeMs")),
+        "connection": "relay" if relay_id else "direct",
+        # Only set when site/info was refused and the id came from the relay hostname.
+        "source": site.get("source", "site_info"),
+    }
 
 
 @mcp.tool(annotations={"readOnlyHint": True})

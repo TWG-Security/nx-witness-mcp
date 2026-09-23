@@ -650,7 +650,7 @@ class NXClient:
                 cloud_id = self.relay_cloud_id()
                 if not cloud_id:
                     raise
-                self._site_info = {"cloudId": cloud_id, "cloudHost": "nxvms.com"}
+                self._site_info = {"cloudId": cloud_id, "cloudHost": "nxvms.com", "source": "relay_host"}
         return self._site_info
 
     async def get_object_track(self, track_id: str) -> dict:

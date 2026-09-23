@@ -263,10 +263,9 @@ server is running, attach it to a gateway.
 
 ### Governance annotations
 
-`tools/list` advertises `readOnlyHint: true` on the 39 read-only tools and
-`readOnlyHint: false` + `destructiveHint: true` on the 25 mutating tools, so the gateway
-hides mutating tools from read-only groups. The full tool set (64 tools) is unchanged by
-this deployment adaptation.
+`tools/list` advertises `readOnlyHint: true` on the 48 read-only tools and
+`readOnlyHint: false` + `destructiveHint: true` on the 30 mutating tools, so the gateway
+hides mutating tools from read-only groups (78 tools in total as of v3.0.0).
 
 ---
 
@@ -307,7 +306,7 @@ Some NX Witness installations also expose a built-in MCP connector (sometimes li
 
 | Category | Tools |
 |----------|-------|
-| Systems | `nx_read_list_systems`, `nx_read_server_info`, `nx_read_list_servers` |
+| Systems | `nx_read_list_systems`, `nx_read_get_site_info`, `nx_read_server_info`, `nx_read_list_servers` |
 | Cameras & Devices | `nx_read_list_cameras`, `nx_read_get_camera`, `nx_write_create_device`, `nx_update_replace_device`, `nx_update_modify_device`, `nx_delete_device`, `nx_read_get_device_status`, `nx_read_get_device_io`, `nx_update_set_device_io`, `nx_read_camera_snapshot`, `nx_read_camera_stream_url` |
 | Device Search | `nx_read_list_device_searches`, `nx_write_start_device_search`, `nx_read_get_device_search`, `nx_delete_stop_device_search`, `nx_read_get_device_types`, `nx_read_get_device_diagnosis`, `nx_read_get_all_devices_diagnosis` |
 | Recording | `nx_read_get_footage` |
@@ -405,6 +404,14 @@ MIT
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.
+
+### v3.0.0 (2026-09-23) — Breaking change
+- **Renamed** `nx_read_virtual_get_upload_status` → `nx_read_virtual_get_transfer_status`; update any callers using the old name.
+- Added analytics object search: `nx_read_search_objects`, `nx_read_get_object_track`, `nx_read_get_object_best_shot`, server-side counts with `nx_read_summarize_objects`, and credential-free Nx client deep links with `nx_read_get_vms_link`. See [Object Search](#object-search).
+- Added `nx_read_get_site_info` (site name, version, local and Nx Cloud ids, connection type).
+- Added the 8 Nx software build (update) tools. See [Software Updates](#software-updates).
+- Fixed `nx_read_camera_snapshot`, which failed on every call.
+- The server now reports its version in the MCP handshake. 64 -> 78 tools.
 
 ### v2.2.0 (2026-07-14)
 - Added per-site env vars `NX_SYSTEM_<NAME>_HOST`/`_USER`/`_PASS` for multi-system config, and fixed multi-system deployments that used them being silently ignored (the server had no parser and fell back to the single-system default). See [Multiple systems](#multiple-systems).
