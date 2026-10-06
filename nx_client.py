@@ -8,6 +8,36 @@ import httpx
 _RELAY_HOST = re.compile(r"^https?://([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.relay[\w-]*\.vmsproxy\.com", re.I)
 
 
+# Keys whose VALUE must never leave this server. Nx's REST API hands an
+# admin session every camera's stored login (`credentials: {user, password}`
+# on /rest/v4/devices and /rest/v4/devices/{id}), and some endpoints echo
+# password-ish fields back; an AI client has no use for them. The user name is
+# kept so a reader can still tell which account a device is paired with.
+_SENSITIVE_KEYS = frozenset(k.lower() for k in (
+    "password", "passwd", "pwd", "passphrase", "secret", "clientSecret", "client_secret",
+    "apiKey", "api_key", "privateKey", "private_key", "passwordHash", "password_hash",
+    "cryptSha512Hash", "digest",
+))
+REDACTED = "<redacted>"
+
+
+def scrub(value: Any) -> Any:
+    """Recursively mask the value of every sensitive key in a JSON-ish payload.
+    Non-empty strings become ``<redacted>``; empty values are left alone so an
+    unset credential still reads as unset."""
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if isinstance(k, str) and k.lower() in _SENSITIVE_KEYS and isinstance(v, str) and v:
+                out[k] = REDACTED
+            else:
+                out[k] = scrub(v)
+        return out
+    if isinstance(value, list):
+        return [scrub(v) for v in value]
+    return value
+
+
 class NXClient:
     def __init__(self, host: str, username: str, password: str):
         self.base_url = host.rstrip("/")
@@ -54,7 +84,10 @@ class NXClient:
         r.raise_for_status()
         if not r.content:
             return {}
-        return r.json()
+        # Every JSON response is scrubbed of credential VALUES before any tool
+        # sees it — see scrub(). Login tickets/tokens are untouched (not in the
+        # key list); the session token itself never passes through here.
+        return scrub(r.json())
 
     async def _get_bytes(self, path: str, params: dict | None = None) -> bytes:
         if not self._token:
