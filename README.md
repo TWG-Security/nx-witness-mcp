@@ -265,7 +265,7 @@ server is running, attach it to a gateway.
 
 `tools/list` advertises `readOnlyHint: true` on the 48 read-only tools and
 `readOnlyHint: false` + `destructiveHint: true` on the 30 mutating tools, so the gateway
-hides mutating tools from read-only groups (78 tools in total as of v3.0.0).
+hides mutating tools from read-only groups (78 tools in total as of v3.0.1).
 
 ---
 
@@ -392,6 +392,7 @@ Notes:
 - `nx_systems.json` is excluded from git — keep credentials out of version control
 - SSL certificate verification is currently disabled for compatibility with self-signed NX Witness certs
 - Use a dedicated NX Witness user with least-privilege permissions for the MCP connection
+- Every Nx API response is scrubbed before it reaches the AI client: the value of any `password`, `secret`, `api_key`, `private_key`, password-hash, or `digest` field is replaced with `<redacted>` (camera `credentials.user` names are kept). Tools that send credentials to Nx are unaffected.
 
 ---
 
@@ -404,6 +405,9 @@ MIT
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.
+
+### v3.0.1 (2026-10-06) — Security
+- Camera passwords no longer leave the server. `nx_read_list_cameras` (`detailed=true`) and `nx_read_get_camera` were returning each device's stored `credentials.password` in clear text; all Nx API responses are now scrubbed of password/secret/key values. No tool changes.
 
 ### v3.0.0 (2026-09-23) — Breaking change
 - **Renamed** `nx_read_virtual_get_upload_status` → `nx_read_virtual_get_transfer_status`; update any callers using the old name.

@@ -9,6 +9,12 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [3.0.1] - 2026-10-06
+
+Security patch. No tool, parameter, or behavior changes beyond response redaction; tool count unchanged (78).
+
 ### Security
 - **Camera passwords no longer leave the server.** Nx's REST API returns every device's stored login — `credentials: {user, password}` — on `GET /rest/v4/devices` and `/rest/v4/devices/{id}` for an admin session, and `nx_read_list_cameras` (`detailed=true`) / `nx_read_get_camera` passed it straight to the AI client in clear text (TWG, 2026-10-06: 34 of 34 cameras on one site). `NXClient._request` now runs every JSON response through `scrub()`, which masks the VALUE of any `password`, `passwd`, `passphrase`, `secret`, `client_secret`, `api_key`, `private_key`, `passwordHash`, `cryptSha512Hash` or `digest` key anywhere in the payload as `<redacted>` (empty values stay empty; the `user` name is kept). Write tools that SEND `credentials` are unaffected — only responses are scrubbed. Login tickets and session tokens are not in the key list.
 
