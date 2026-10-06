@@ -19,12 +19,20 @@ _SENSITIVE_KEYS = frozenset(k.lower() for k in (
     "cryptSha512Hash", "digest",
 ))
 REDACTED = "<redacted>"
+# scheme://user:PASSWORD@host — credentials embedded in a URL. Nx returns
+# SMB/NFS storage paths this way (`smb://user:pass@nas/share` on
+# /rest/v4/servers → storages[].path), and camera URLs can carry rtsp://
+# logins. Only the password part is masked; user and host stay readable.
+_URL_USERINFO = re.compile(r"\b([a-z][a-z0-9+.-]*://[^\s/:@\"']+:)([^\s/@\"']+)(@)", re.I)
 
 
 def scrub(value: Any) -> Any:
-    """Recursively mask the value of every sensitive key in a JSON-ish payload.
+    """Recursively mask the value of every sensitive key in a JSON-ish payload,
+    and the password inside any ``scheme://user:password@host`` string.
     Non-empty strings become ``<redacted>``; empty values are left alone so an
     unset credential still reads as unset."""
+    if isinstance(value, str):
+        return _URL_USERINFO.sub(lambda m: f"{m.group(1)}{REDACTED}{m.group(3)}", value)
     if isinstance(value, dict):
         out = {}
         for k, v in value.items():
