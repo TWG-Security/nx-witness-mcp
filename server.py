@@ -19,7 +19,7 @@ from starlette.responses import PlainTextResponse
 
 from nx_client import NXClient
 
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 
 # ---------------------------------------------------------------------------
 # Multi-system configuration
